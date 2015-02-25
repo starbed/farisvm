@@ -9,6 +9,7 @@ main(int argc, char *argv[])
     vm.add_rule("||2-only.page.ne.jp");
     vm.add_rule("/eas?*^easformat=");
     vm.add_rule("||csdn.net^*/counter.js");
+    vm.add_rule("@@||cdn.api.twitter.com*http%$script,third-party");
 
     vm.print_asm();
 

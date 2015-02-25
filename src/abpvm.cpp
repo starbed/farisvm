@@ -1,7 +1,6 @@
 #include "abpvm.hpp"
 
-//#include <types.h>
-
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -16,13 +15,12 @@
 #define CHAR_TAIL      -2
 #define CHAR_SEPARATOR -3
 
-#define FLAG_NOT  0x00001
-#define FLAG_CASE 0x00002
+#define TO_LOWER(CH_) (('A' <= CH_ && CH_ <= 'Z') ? CH_ + ('a' - 'A') : CH_)
 
 // characters for URL by RFC 3986
 int urlchar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                    0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1,
                     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1,
@@ -64,6 +62,7 @@ abpvm_exception::~abpvm_exception() throw()
 {
 
 }
+
 const char*
 abpvm_exception::what() const throw()
 {
@@ -77,26 +76,25 @@ abpvm::abpvm()
 
 abpvm::~abpvm()
 {
-    for (auto p: m_codes) {
-        delete p;
+    for (auto &p: m_codes) {
+        delete p.code;
     }
 }
 
 void
 abpvm::print_asm()
 {
-    int i = 0;
-    for (auto p: m_codes) {
-        std::cout << m_rules[i] << ":" << std::endl;
-        i++;
+    for (auto &code: m_codes) {
+        std::cout << "\"" << code.rule << "\"" << std::endl;
 
         abpvm_head *head;
         abpvm_inst *inst;
+        char *p = code.code;
 
         head = (abpvm_head*)p;
         p += sizeof(*head);
 
-        for (int j = 0; j < head->num_inst; j++) {
+        for (uint32_t j = 0; j < head->num_inst; j++) {
             inst = (abpvm_inst*)p;
             p += sizeof(*inst);
 
@@ -133,18 +131,146 @@ abpvm::print_asm()
 }
 
 void
-abpvm::add_rule(std::string rule, bool is_match_case, const void *p)
+abpvm::split(const std::string &str, const std::string &delim,
+             std::vector<std::string> &ret)
+{
+    size_t current = 0, found, delimlen = delim.size();
+
+    while((found = str.find(delim, current)) != std::string::npos) {
+        ret.push_back(std::string(str, current, found - current));
+        current = found + delimlen;
+    }
+
+    ret.push_back(std::string(str, current, str.size() - current));
+}
+
+void
+abpvm::add_rule(const std::string &rule)
+{
+    std::vector<std::string> sp;
+    std::string url_rule;
+    abpvm_code code;
+    uint32_t flags = 0;
+
+    split(rule, "##", sp);
+
+    if (sp.size() > 1) {
+        // TODO: element hide
+        return;
+    } else {
+        // URL filter
+        sp.clear();
+
+        split(rule, "$", sp);
+
+        if (sp.size() > 1) {
+            std::vector<std::string> opts;
+
+            split(sp[1], ",", opts);
+
+            for (auto &opt: opts) {
+                if (opt == "match-case") {
+                    flags |= FLAG_MATCH_CASE;
+                } else if (opt == "script") {
+                    flags |= FLAG_SCRIPT;
+                } else if (opt == "~script") {
+                    flags |= FLAG_NOT_SCRIPT;
+                } else if (opt == "image") {
+                    flags |= FLAG_IMAGE;
+                } else if (opt == "~image") {
+                    flags |= FLAG_NOT_IMAGE;
+                } else if (opt == "stylesheet") {
+                    flags |= FLAG_STYLESHEET;
+                } else if (opt == "~stylesheet") {
+                    flags |= FLAG_NOT_STYLESHEET;
+                } else if (opt == "object") {
+                    flags |= FLAG_OBJECT;
+                } else if (opt == "~object") {
+                    flags |= FLAG_NOT_OBJECT;
+                } else if (opt == "xmlhttprequest") {
+                    flags |= FLAG_XMLHTTPREQUEST;
+                } else if (opt == "~xmlhttprequest") {
+                    flags |= FLAG_NOT_XMLHTTPREQUEST;
+                } else if (opt == "object-subrequest") {
+                    flags |= FLAG_OBJECT_SUBREQUEST;
+                } else if (opt == "~object-subrequest") {
+                    flags |= FLAG_NOT_OBJECT_SUBREQUEST;
+                } else if (opt == "subdocument") {
+                    flags |= FLAG_SUBDOCUMENT;
+                } else if (opt == "~subdocument") {
+                    flags |= FLAG_NOT_SUBDOCUMENT;
+                } else if (opt == "document") {
+                    flags |= FLAG_DOCUMENT;
+                } else if (opt == "~document") {
+                    flags |= FLAG_NOT_DOCUMENT;
+                } else if (opt == "elemhide") {
+                    flags |= FLAG_ELEMHIDE;
+                } else if (opt == "~elemhide") {
+                    flags |= FLAG_NOT_ELEMHIDE;
+                } else if (opt == "other") {
+                    flags |= FLAG_OTHER;
+                } else if (opt == "~other") {
+                    flags |= FLAG_NOT_OTHER;
+                } else if (opt == "third-party") {
+                    flags |= FLAG_THIRD_PARTY;
+                } else if (opt == "~third-party") {
+                    flags |= FLAG_NOT_THIRD_PARTY;
+                } else if (opt == "collapse") {
+                    flags |= FLAG_COLLAPSE;
+                } else if (opt == "~collapse") {
+                    flags |= FLAG_NOT_COLLAPSE;
+                } else {
+                    std::string s = opt.substr(0, 7); // domain=
+                    if (s == "domain=") {
+                        std::vector<std::string> sp2;
+                        s = opt.substr(7);
+                        split(s, "|", sp2);
+
+                        for (auto &d: sp2) {
+                            if (d.at(0) == '~') {
+                                d.erase(0);
+                                std::transform(d.begin(), d.end(),
+                                               d.begin(), ::tolower);
+                                code.ex_domains.push_back(d);
+                            } else {
+                                std::transform(d.begin(), d.end(),
+                                               d.begin(), ::tolower);
+                                code.domains.push_back(d);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        url_rule = sp[0];
+        if (url_rule.size() >= 2 &&
+            url_rule.at(0) == '@' && url_rule.at(1) == '@') {
+            flags |= FLAG_NOT;
+        }
+    }
+
+    code.flags = flags;
+    code.rule  = url_rule;
+    code.code  = get_code(url_rule, flags);
+
+    if (code.code != NULL)
+        m_codes.push_back(code);
+}
+
+char *
+abpvm::get_code(const std::string &rule, uint32_t flags)
 {
     abpvm_head head;
     abpvm_inst inst[INST_MAX];
     const char *sp = rule.c_str();
 
     head.num_inst = 0;
-    head.flag     = 0;
-    head.p        = p;
+    head.flags    = flags;
 
-    if (is_match_case)
-        head.flag |= FLAG_CASE;
+    if (sp[0] == '@' && sp[1] == '@') {
+        sp += 2;
+    }
 
     if (sp[0] == '|') {
         if (sp[1] == '|') {
@@ -163,9 +289,6 @@ abpvm::add_rule(std::string rule, bool is_match_case, const void *p)
             sp++;
             head.num_inst++;
         }
-    } else if (sp[0] == '@' && sp[1] == '@') {
-        head.flag |= FLAG_NOT;
-        sp += 2;
     }
 
     while (*sp != '\0') {
@@ -183,8 +306,12 @@ abpvm::add_rule(std::string rule, bool is_match_case, const void *p)
             if (sp[1] == '^') {
                 inst[head.num_inst].c = CHAR_SEPARATOR;
             } else {
-                if (urlchar[sp[1]]) {
-                    inst[head.num_inst].c = sp[1];
+                if (urlchar[(int)sp[1]]) {
+                    if (flags & FLAG_MATCH_CASE) {
+                        inst[head.num_inst].c = sp[1];
+                    } else {
+                        inst[head.num_inst].c = TO_LOWER(sp[1]);
+                    }
                 } else {
                     // invalid character
                     std::ostringstream oss;
@@ -216,9 +343,14 @@ abpvm::add_rule(std::string rule, bool is_match_case, const void *p)
 
             sp++;
         } else {
-            if (urlchar[sp[0]]) {
+            if (urlchar[(int)sp[0]]) {
                 inst[head.num_inst].opcode = OP_CHAR;
-                inst[head.num_inst].c = sp[0];
+
+                if (flags & FLAG_MATCH_CASE) {
+                    inst[head.num_inst].c = sp[0];
+                } else {
+                    inst[head.num_inst].c = TO_LOWER(sp[0]);
+                }
             } else {
                 // invalide character
                 std::ostringstream oss;
@@ -239,12 +371,13 @@ abpvm::add_rule(std::string rule, bool is_match_case, const void *p)
     head.num_inst++;
 
     if (head.num_inst > 0) {
-        char *codes = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
+        char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
 
-        memcpy(codes, &head, sizeof(head));
-        memcpy(codes + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
+        memcpy(code, &head, sizeof(head));
+        memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
 
-        m_codes.push_back(codes);
-        m_rules.push_back(rule);
+        return code;
+    } else {
+        return NULL;
     }
 }
