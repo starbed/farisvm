@@ -35,12 +35,16 @@
 
 class abpvm {
 public:
+    struct abpvm_match_result {
+        std::string rule;
+    };
+
     abpvm();
     virtual ~abpvm();
 
     void add_rule(const std::string &rule);
     void print_asm();
-    void match(char const * const * uri, bool *result, int size);
+    void match(char const * const * uri, int size);
 
 private:
     struct abpvm_head {
@@ -64,6 +68,7 @@ private:
 
     std::vector<abpvm_code> m_codes;
 
+    bool vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);

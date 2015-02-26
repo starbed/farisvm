@@ -13,7 +13,7 @@
 #define OP_MATCH       3
 
 #define CHAR_HEAD      -1
-#define CHAR_TAIL      -2
+#define CHAR_TAIL      0
 #define CHAR_SEPARATOR -3
 
 #define TO_LOWER(CH_) (('A' <= CH_ && CH_ <= 'Z') ? CH_ + ('a' - 'A') : CH_)
@@ -100,14 +100,84 @@ abpvm::~abpvm()
 }
 
 void
-abpvm::match(char const * const * uri, bool result[], int size)
+abpvm::match(char const * const * uri, int size)
 {
     // TODO: handle options
+    // TODO: check input
 
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
+            abpvm_head *head = (abpvm_head*)code.code;
+            abpvm_inst *pc = (abpvm_inst*)(code.code + sizeof(*head));
+            bool check_head = false;
+            bool ret = false;
+
+            if (pc->opcode == OP_CHAR && pc->c == CHAR_HEAD) {
+                check_head = true;
+                pc++;
+            }
+
+            for (int j = 0; j < strlen(uri[i]); j++) {
+                const char *sp = uri[i] + j;
+
+                ret = vmrun(head, pc, sp);
+
+                if (ret || check_head) {
+                    break;
+                }
+            }
+
+            // TODO: store result
         }
     }
+}
+
+bool
+abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
+{
+    for (;;) {
+        switch (pc->opcode) {
+        case OP_CHAR:
+        {
+            if (pc->c != *sp) {
+                return false;
+            } else {
+                sp++;
+            }
+        }
+        case OP_SKIP_TO:
+        {
+            while (pc->c != *sp) {
+                if (*sp == '\0') {
+                    return false;
+                }
+                sp++;
+            }
+        }
+        case OP_SKIP_SCHEME:
+        {
+            while (*sp !=':') {
+                if (! schemechar[*sp]) {
+                    return false;
+                }
+                sp++;
+            }
+
+            sp++;
+
+            while (*sp == '/') {
+                sp++;
+            }
+        }
+        case OP_MATCH:
+            return true;
+        }
+
+        pc++;
+    }
+
+    // not reach here
+    return true;
 }
 
 void
@@ -284,15 +354,19 @@ abpvm::add_rule(const std::string &rule)
     // preprocess rule
     std::string result;
 
-    std::regex re_star("\\*+");
+    std::regex re_multistar("\\*\\*+");
     std::regex re_tailstar("\\*$");
     std::regex re_headstar("^\\*");
-    std::regex re_septail("\\^\\|$");
+    std::regex re_starbar("\\*\\|$");
+    std::regex re_barstar("^\\|\\*");
+    std::regex re_sepbar("\\^\\|$");
 
-    url_rule = std::regex_replace(url_rule, re_star, "*");
+    url_rule = std::regex_replace(url_rule, re_multistar, "*");
     url_rule = std::regex_replace(url_rule, re_tailstar, "");
     url_rule = std::regex_replace(url_rule, re_headstar, "");
-    url_rule = std::regex_replace(url_rule, re_septail, "^");
+    url_rule = std::regex_replace(url_rule, re_starbar, "");
+    url_rule = std::regex_replace(url_rule, re_barstar, "");
+    url_rule = std::regex_replace(url_rule, re_sepbar, "^");
 
     code.flags = flags;
     code.rule  = url_rule;
