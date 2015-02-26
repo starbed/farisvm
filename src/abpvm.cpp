@@ -238,6 +238,8 @@ abpvm::add_rule(const std::string &rule)
                                 code.domains.push_back(d);
                             }
                         }
+
+                        flags |= FLAG_DOMAIN;
                     }
                 }
             }

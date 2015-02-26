@@ -31,6 +31,7 @@
 #define FLAG_NOT_THIRD_PARTY       (0x00000001 << 23)
 #define FLAG_COLLAPSE              (0x00000001 << 24)
 #define FLAG_NOT_COLLAPSE          (0x00000001 << 25)
+#define FLAG_DOMAIN                (0x00000001 << 26)
 
 class abpvm {
 public:
