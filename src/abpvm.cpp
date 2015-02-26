@@ -12,11 +12,12 @@
 #define OP_SKIP_SCHEME 2
 #define OP_MATCH       3
 
+#define CHAR_TAIL       0
 #define CHAR_HEAD      -1
-#define CHAR_TAIL      0
-#define CHAR_SEPARATOR -3
+#define CHAR_SEPARATOR -2
 
 #define TO_LOWER(CH_) (('A' <= CH_ && CH_ <= 'Z') ? CH_ + ('a' - 'A') : CH_)
+#define UNSIGNED(CH_) (int)(unsigned char)(CH_)
 
 // characters for URL by RFC 3986
 int urlchar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -139,25 +140,39 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
         switch (pc->opcode) {
         case OP_CHAR:
         {
-            if (pc->c != *sp) {
-                return false;
+            if (pc->c == CHAR_SEPARATOR) {
+                if (! sepchar[(unsigned char)*sp]) {
+                    return false;
+                }
             } else {
-                sp++;
+                if (pc->c != *sp) {
+                    return false;
+                }
             }
+            sp++;
         }
         case OP_SKIP_TO:
         {
-            while (pc->c != *sp) {
-                if (*sp == '\0') {
-                    return false;
+            if (pc->c == CHAR_SEPARATOR) {
+                while (! sepchar[(unsigned char)*sp]) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
                 }
-                sp++;
+            } else {
+                while (pc->c != *sp) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
+                }
             }
         }
         case OP_SKIP_SCHEME:
         {
             while (*sp !=':') {
-                if (! schemechar[*sp]) {
+                if (! schemechar[(unsigned char)*sp]) {
                     return false;
                 }
                 sp++;
@@ -374,7 +389,7 @@ abpvm::add_rule(const std::string &rule)
 
     code.original_rule = rule;
 
-    if (code.code != NULL)
+    if (code.code != nullptr)
         m_codes.push_back(code);
 }
 
@@ -426,7 +441,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
             if (sp[1] == '^') {
                 inst[head.num_inst].c = CHAR_SEPARATOR;
             } else {
-                if (urlchar[(int)sp[1]]) {
+                if (urlchar[(unsigned char)sp[1]]) {
                     if (flags & FLAG_MATCH_CASE) {
                         inst[head.num_inst].c = sp[1];
                     } else {
@@ -463,7 +478,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
 
             sp++;
         } else {
-            if (urlchar[(int)sp[0]]) {
+            if (urlchar[(unsigned char)sp[0]]) {
                 inst[head.num_inst].opcode = OP_CHAR;
 
                 if (flags & FLAG_MATCH_CASE) {
@@ -498,6 +513,6 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
 
         return code;
     } else {
-        return NULL;
+        return nullptr;
     }
 }
