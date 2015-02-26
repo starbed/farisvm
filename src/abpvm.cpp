@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <regex>
 
 #define INST_MAX 4096
 
@@ -53,6 +54,23 @@ int sepchar[256] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+                       0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                       0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
 {
 
@@ -78,6 +96,17 @@ abpvm::~abpvm()
 {
     for (auto &p: m_codes) {
         delete p.code;
+    }
+}
+
+void
+abpvm::match(char const * const * uri, bool result[], int size)
+{
+    // TODO: handle options
+
+    for (int i = 0; i < size; i++) {
+        for (auto &code: m_codes) {
+        }
     }
 }
 
@@ -252,9 +281,24 @@ abpvm::add_rule(const std::string &rule)
         }
     }
 
+    // preprocess rule
+    std::string result;
+
+    std::regex re_star("\\*+");
+    std::regex re_tailstar("\\*$");
+    std::regex re_headstar("^\\*");
+    std::regex re_septail("\\^\\|$");
+
+    url_rule = std::regex_replace(url_rule, re_star, "*");
+    url_rule = std::regex_replace(url_rule, re_tailstar, "");
+    url_rule = std::regex_replace(url_rule, re_headstar, "");
+    url_rule = std::regex_replace(url_rule, re_septail, "^");
+
     code.flags = flags;
     code.rule  = url_rule;
     code.code  = get_code(url_rule, flags);
+
+    code.original_rule = rule;
 
     if (code.code != NULL)
         m_codes.push_back(code);

@@ -40,6 +40,7 @@ public:
 
     void add_rule(const std::string &rule);
     void print_asm();
+    void match(char const * const * uri, bool *result, int size);
 
 private:
     struct abpvm_head {
@@ -55,6 +56,7 @@ private:
     struct abpvm_code {
         std::vector<std::string> domains;
         std::vector<std::string> ex_domains;
+        std::string original_rule;
         std::string rule;
         uint32_t    flags;
         char       *code;
