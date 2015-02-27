@@ -44,7 +44,7 @@ public:
 
     void add_rule(const std::string &rule);
     void print_asm();
-    void match(char const * const * uri, int size);
+    void match(std::vector<std::string> &result, char const * const * uri, int size);
 
 private:
     struct abpvm_head {

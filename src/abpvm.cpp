@@ -101,7 +101,7 @@ abpvm::~abpvm()
 }
 
 void
-abpvm::match(char const * const * uri, int size)
+abpvm::match(std::vector<std::string> &result, char const * const * uri, int size)
 {
     // TODO: handle options
     // TODO: check input
@@ -128,7 +128,9 @@ abpvm::match(char const * const * uri, int size)
                 }
             }
 
-            // TODO: store result
+            if (ret) {
+                result.push_back(code.original_rule);
+            }
         }
     }
 }
@@ -150,6 +152,7 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
                 }
             }
             sp++;
+            break;
         }
         case OP_SKIP_TO:
         {
@@ -168,6 +171,7 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
                     sp++;
                 }
             }
+            break;
         }
         case OP_SKIP_SCHEME:
         {
@@ -183,6 +187,7 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
             while (*sp == '/') {
                 sp++;
             }
+            break;
         }
         case OP_MATCH:
             return true;
@@ -272,9 +277,8 @@ abpvm::add_rule(const std::string &rule)
         return;
     }
 
-    split(rule, "##", sp);
-
-    if (sp.size() > 1) {
+    if (rule.find("##") != std::string::npos ||
+        rule.find("#@#") != std::string::npos) {
         // TODO: element hide
         return;
     } else {
@@ -347,6 +351,9 @@ abpvm::add_rule(const std::string &rule)
                         split(s, "|", sp2);
 
                         for (auto &d: sp2) {
+                            if (d.empty())
+                                continue;
+
                             if (d.at(0) == '~') {
                                 d.erase(0);
                                 std::transform(d.begin(), d.end(),
