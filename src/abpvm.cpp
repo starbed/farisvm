@@ -191,7 +191,7 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
         pc++;
     }
 
-    // not reach here
+    // never reach here
     return true;
 }
 
@@ -265,6 +265,12 @@ abpvm::add_rule(const std::string &rule)
     std::string url_rule;
     abpvm_code code;
     uint32_t flags = 0;
+
+    // do not add empty rules
+    // do not add any comments
+    if (rule.size() == 0 || rule.at(0) == '!') {
+        return;
+    }
 
     split(rule, "##", sp);
 
