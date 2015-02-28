@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <chrono>
 
 int
 main(int argc, char *argv[])
@@ -27,7 +28,6 @@ main(int argc, char *argv[])
         getline(ifs,line);
 
         while (getline(ifs, line)) {
-            //std::cout << line << std::endl;
             try {
                 vm.add_rule(line);
             } catch (abpvm_exception e) {
@@ -36,24 +36,31 @@ main(int argc, char *argv[])
         }
     }
 
-    //vm.print_asm();
+    vm.print_asm();
 
     std::cout << "loaded filters\n" << std::endl;
 
     for (;;) {
-        const char *s[1];
+        abpvm_query q;
         std::vector<std::string> result;
         std::string input;
         std::cin >> input;
 
-        s[0] = input.c_str();
+        q.set_uri(input);
 
-        vm.match(result, s, 1);
+        const auto startTime = std::chrono::system_clock::now();
+
+        vm.match(result, &q, 1);
+
+        const auto endTime = std::chrono::system_clock::now();
+        const auto timeSpan = endTime - startTime;
 
         for (auto &ret: result) {
             std::cout << ret << std::endl;
         }
-        std::cout << std::endl;
+        std::cout <<
+            std::chrono::duration_cast<std::chrono::microseconds>(timeSpan).count()
+            << " [us]\n" << std::endl;
     }
 
     return 0;

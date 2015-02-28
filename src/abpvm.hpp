@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 #include <exception>
+#include <memory>
+
+#include <boost/algorithm/searching/boyer_moore_horspool.hpp>
 
 #define FLAG_MATCH_CASE             0x00000001
 #define FLAG_NOT                   (0x00000001 <<  1)
@@ -33,6 +36,17 @@
 #define FLAG_NOT_COLLAPSE          (0x00000001 << 25)
 #define FLAG_DOMAIN                (0x00000001 << 26)
 
+class abpvm_query {
+public:
+    void set_uri(const std::string &uri);
+    const std::string &get_uri() const { return m_uri; }
+    const std::string &get_domain() const { return m_domain; }
+
+private:
+    std::string m_uri;
+    std::string m_domain;
+};
+
 class abpvm {
 public:
     struct abpvm_match_result {
@@ -44,9 +58,18 @@ public:
 
     void add_rule(const std::string &rule);
     void print_asm();
-    void match(std::vector<std::string> &result, char const * const * uri, int size);
+    void match(std::vector<std::string> &result, const abpvm_query *query, int size);
 
 private:
+    typedef boost::algorithm::boyer_moore_horspool<std::string::iterator> BMH;
+
+    struct abpvm_domain {
+        abpvm_domain(std::string d) : name(d), bmh(new BMH(d.begin(), d.end())) { }
+
+        std::shared_ptr<BMH> bmh;
+        std::string name;
+    };
+
     struct abpvm_head {
         uint32_t flags;
         uint32_t num_inst;
@@ -58,8 +81,8 @@ private:
     };
 
     struct abpvm_code {
-        std::vector<std::string> domains;
-        std::vector<std::string> ex_domains;
+        std::vector<abpvm_domain> domains;
+        std::vector<abpvm_domain> ex_domains;
         std::string original_rule;
         std::string rule;
         uint32_t    flags;

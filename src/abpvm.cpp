@@ -88,6 +88,35 @@ abpvm_exception::what() const throw()
     return m_msg.c_str();
 }
 
+void
+abpvm_query::set_uri(const std::string &uri)
+{
+    m_uri = uri;
+
+    size_t colon = m_uri.find(":");
+    if (colon == std::string::npos) {
+        m_domain = "";
+        return;
+    }
+
+    size_t begin = colon + 1;
+    while (begin < m_uri.size() && m_uri.at(begin) == '/') {
+        begin++;
+    }
+
+    if (begin >= m_uri.size()) {
+        m_domain = "";
+        return;
+    }
+
+    size_t end = begin + 1;
+    while (end < m_uri.size() && m_uri.at(end) != '/') {
+        end++;
+    }
+
+    m_domain = uri.substr(begin, end - begin);
+}
+
 abpvm::abpvm()
 {
 
@@ -101,9 +130,8 @@ abpvm::~abpvm()
 }
 
 void
-abpvm::match(std::vector<std::string> &result, char const * const * uri, int size)
+abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
-    // TODO: handle options
     // TODO: check input
 
     for (int i = 0; i < size; i++) {
@@ -118,8 +146,9 @@ abpvm::match(std::vector<std::string> &result, char const * const * uri, int siz
                 pc++;
             }
 
-            for (int j = 0; j < strlen(uri[i]); j++) {
-                const char *sp = uri[i] + j;
+            const std::string &uri(query[i].get_uri());
+            for (int j = 0; j < uri.size(); j++) {
+                const char *sp = uri.c_str() + j;
 
                 ret = vmrun(head, pc, sp);
 
@@ -129,6 +158,29 @@ abpvm::match(std::vector<std::string> &result, char const * const * uri, int siz
             }
 
             if (ret) {
+                // TODO: check options
+                // check domains
+                if (code.flags & FLAG_DOMAIN) {
+                    const std::string &qd(query[i].get_domain());
+                    std::string::const_iterator search_result;
+
+                    for (auto &d: code.ex_domains) {
+                        search_result = (*d.bmh)(qd.begin(), qd.end());
+                        if (search_result == qd.end()) {
+                            continue;
+                        }
+                    }
+
+                    for (auto &d: code.domains) {
+                        search_result = (*d.bmh)(qd.begin(), qd.end());
+                        if (search_result != qd.end()) {
+                            goto found;
+                        }
+                    }
+
+                    continue;
+                }
+found:
                 result.push_back(code.original_rule);
             }
         }
@@ -203,6 +255,12 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
 void
 abpvm::print_asm()
 {
+    int total_inst = 0;
+    int total_char = 0;
+    int total_skip_to = 0;
+    int total_skip_scheme = 0;
+    int total_match = 0;
+
     for (auto &code: m_codes) {
         std::cout << "\"" << code.rule << "\"" << std::endl;
 
@@ -213,12 +271,15 @@ abpvm::print_asm()
         head = (abpvm_head*)p;
         p += sizeof(*head);
 
+        total_inst += head->num_inst;
+
         for (uint32_t j = 0; j < head->num_inst; j++) {
             inst = (abpvm_inst*)p;
             p += sizeof(*inst);
 
             if (inst->opcode == OP_CHAR) {
                 std::cout << "char ";
+                total_char++;
                 if (inst->c == CHAR_HEAD) {
                     std::cout << "head" << std::endl;
                 } else if (inst->c == CHAR_TAIL) {
@@ -230,8 +291,10 @@ abpvm::print_asm()
                 }
             } else if (inst->opcode == OP_MATCH) {
                 std::cout << "match" << std::endl;
+                total_match++;
             } else if (inst->opcode == OP_SKIP_TO) {
                 std::cout << "skip_to ";
+                total_skip_to++;
                 if (inst->c == CHAR_HEAD) {
                     std::cout << "head" << std::endl;
                 } else if (inst->c == CHAR_TAIL) {
@@ -243,10 +306,19 @@ abpvm::print_asm()
                 }
             } else if (inst->opcode == OP_SKIP_SCHEME) {
                 std::cout << "skip_scheme" << std::endl;
+                total_skip_scheme++;
             }
         }
         std::cout << std::endl;
     }
+
+    std::cout << "#rule = " << m_codes.size()
+              << "\n#instruction = " << total_inst
+              << "\n#char = " << total_char
+              << "\n#skip_to = " << total_skip_to
+              << "\nskip_scheme = " << total_skip_scheme
+              << "\nmatch = " << total_match
+              << "\n" << std::endl;
 }
 
 void
@@ -358,11 +430,13 @@ abpvm::add_rule(const std::string &rule)
                                 d.erase(0);
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
-                                code.ex_domains.push_back(d);
+                                abpvm_domain domain(d);
+                                code.ex_domains.push_back(domain);
                             } else {
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
-                                code.domains.push_back(d);
+                                abpvm_domain domain(d);
+                                code.domains.push_back(domain);
                             }
                         }
 
