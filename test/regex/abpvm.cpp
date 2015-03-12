@@ -332,6 +332,12 @@ abpvm::add_rule(const std::string &rule)
     code.rule  = url_rule;
 
     try {
+        validate_rule(url_rule);
+    } catch (abpvm_exception e) {
+        return;
+    }
+
+    try {
         code.re = get_re(url_rule);
     } catch (...) {
         return;
@@ -357,4 +363,67 @@ abpvm::get_re(const std::string &rule)
     std::cout << rule << "\n" << re_rule << "\n" << std::endl;
 
     return std::shared_ptr<std::regex>(new std::regex(re_rule));
+}
+
+void
+abpvm::validate_rule(const std::string &rule)
+{
+    const char *sp = rule.c_str();
+
+    if (sp[0] == '@' && sp[1] == '@') {
+        sp += 2;
+    }
+
+    if (sp[0] == '|') {
+        if (sp[1] == '|') {
+            sp += 2;
+        } else {
+            sp++;
+        }
+    }
+
+    while (*sp != '\0') {
+        if (sp[0] == '*') {
+            if (sp[1] == '^') {
+            } else {
+                if (urlchar[(unsigned char)sp[1]]) {
+                } else {
+                    // invalid character
+                    std::ostringstream oss;
+                    oss << rule << ":\n"
+                        << "\tinvalid character at " << &sp[1] - rule.c_str()
+                        << " (" << sp[1] << ")";
+                    throw(abpvm_exception(oss.str()));
+                }
+            }
+
+            sp += 2;
+        } else if (sp[0] == '^'){
+            sp++;
+        } else if (sp[0] == '|') {
+            if (sp[1] == '\0') {
+            } else {
+                // parse error
+                std::ostringstream oss;
+                oss << rule << ":\n"
+                    << "\tinvalid character at " << &sp[0] - rule.c_str()
+                    << " (" << sp[0] << ")";
+                throw(abpvm_exception(oss.str()));
+            }
+
+            sp++;
+        } else {
+            if (urlchar[(unsigned char)sp[0]]) {
+            } else {
+                // invalide character
+                std::ostringstream oss;
+                oss << rule << ":\n"
+                    << "\tinvalid character at " << &sp[0] - rule.c_str()
+                    << " (" << sp[0] << ")";
+                throw(abpvm_exception(oss.str()));
+            }
+
+            sp++;
+        }
+    }
 }

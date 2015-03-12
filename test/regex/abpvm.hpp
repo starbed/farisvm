@@ -58,7 +58,6 @@ public:
     virtual ~abpvm();
 
     void add_rule(const std::string &rule);
-    //void print_asm();
     void match(std::vector<std::string> &result, const abpvm_query *query, int size);
 
 private:
@@ -71,33 +70,19 @@ private:
         std::string name;
     };
 
-/*
-    struct abpvm_head {
-        uint32_t flags;
-        uint32_t num_inst;
-    };
-
-    struct abpvm_inst {
-        uint8_t opcode;
-        char    c;
-    };
-    */
-
     struct abpvm_code {
         std::vector<abpvm_domain> domains;
         std::vector<abpvm_domain> ex_domains;
         std::string original_rule;
         std::string rule;
         uint32_t    flags;
-        //char       *code;
         std::shared_ptr<std::regex>  re;
     };
 
     std::vector<abpvm_code> m_codes;
 
-    // bool vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp);
-    // char *get_code(const std::string &rule, uint32_t flags);
     std::shared_ptr<std::regex> get_re(const std::string &rule);
+    void validate_rule(const std::string &rule);
 
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);
