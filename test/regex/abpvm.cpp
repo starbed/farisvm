@@ -150,7 +150,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
             const std::string &uri(query[i].get_uri());
 
-            if (std::regex_match(uri, *code.re)) {
+            if (std::regex_search(uri, *code.re)) {
                 ret = true;
             }
 
