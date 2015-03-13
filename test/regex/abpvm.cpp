@@ -83,6 +83,8 @@ std::regex re_head("^\\|");
 std::regex re_star("\\*");
 std::regex re_tail("\\|$");
 std::regex re_hat("\\^");
+std::regex re_q("\\?");
+std::regex re_plus("\\+");
 
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
 {
@@ -150,9 +152,15 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
             const std::string &uri(query[i].get_uri());
 
+#ifdef USE_RE2
+            if (RE2::PartialMatch(uri, *code.re)) {
+                ret = true;
+            }
+#else
             if (std::regex_search(uri, *code.re)) {
                 ret = true;
             }
+#endif
 
             if (ret) {
                 // TODO: check options
@@ -348,21 +356,36 @@ abpvm::add_rule(const std::string &rule)
     m_codes.push_back(code);
 }
 
-std::shared_ptr<std::regex>
+#ifdef USE_RE2
+  std::shared_ptr<RE2>
+#else
+  std::shared_ptr<std::regex>
+#endif
 abpvm::get_re(const std::string &rule)
 {
     std::string re_rule = rule;
 
+    if (re_rule.at(0) == '@' && re_rule.at(1) == '@') {
+        re_rule = re_rule.substr(2);
+    }
+
+    re_rule = std::regex_replace(re_rule, re_q, "\\?");
+    re_rule = std::regex_replace(re_rule, re_plus, "\\+");
     re_rule = std::regex_replace(re_rule, re_hat, "(?:[\\x00-\\x24\\x26-\\x2C\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\x7F]|$)");
     re_rule = std::regex_replace(re_rule, re_scheme,
-                                 "^[\\w\\-]+:\\/+(?!\\/)(?:[^\\/]+\\.)?");
+                                 "^[\\w\\-]+:\\/+");
     re_rule = std::regex_replace(re_rule, re_head, "^");  // |foo -> ^foo
     re_rule = std::regex_replace(re_rule, re_star, ".*"); // fo*o -> fo.*o
     re_rule = std::regex_replace(re_rule, re_tail, "$");  // foo| -> foo$
 
     std::cout << rule << "\n" << re_rule << "\n" << std::endl;
 
+#ifdef USE_RE2
+    return std::shared_ptr<RE2>(new RE2(re_rule));
+#else
     return std::shared_ptr<std::regex>(new std::regex(re_rule));
+#endif
+
 }
 
 void

@@ -1,11 +1,18 @@
 #ifndef ABPVM_C
 #define ABPVM_C
 
+// #define USE_RE2
+
 #include <string>
 #include <vector>
 #include <exception>
 #include <memory>
-#include <regex>
+
+#ifdef USE_RE2
+  #include <re2/re2.h>
+#else
+  #include <regex>
+#endif
 
 #include <boost/algorithm/searching/boyer_moore_horspool.hpp>
 
@@ -76,12 +83,21 @@ private:
         std::string original_rule;
         std::string rule;
         uint32_t    flags;
+#ifdef USE_RE2
+        std::shared_ptr<RE2> re;
+#else
         std::shared_ptr<std::regex>  re;
+#endif
     };
 
     std::vector<abpvm_code> m_codes;
 
+#ifdef USE_RE2
+    std::shared_ptr<RE2> get_re(const std::string &rule);
+#else
     std::shared_ptr<std::regex> get_re(const std::string &rule);
+#endif
+
     void validate_rule(const std::string &rule);
 
     void split(const std::string &str, const std::string &delim,
