@@ -85,6 +85,10 @@ std::regex re_tail("\\|$");
 std::regex re_hat("\\^");
 std::regex re_q("\\?");
 std::regex re_plus("\\+");
+std::regex re_dot("\\.");
+std::regex re_lparen("\\(");
+std::regex re_rparen("\\)");
+std::regex re_exclamation("\\!");
 
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
 {
@@ -369,6 +373,10 @@ abpvm::get_re(const std::string &rule)
         re_rule = re_rule.substr(2);
     }
 
+    re_rule = std::regex_replace(re_rule, re_exclamation, "\\!");
+    re_rule = std::regex_replace(re_rule, re_lparen, "\\(");
+    re_rule = std::regex_replace(re_rule, re_rparen, "\\)");
+    re_rule = std::regex_replace(re_rule, re_dot, "\\.");
     re_rule = std::regex_replace(re_rule, re_q, "\\?");
     re_rule = std::regex_replace(re_rule, re_plus, "\\+");
     re_rule = std::regex_replace(re_rule, re_hat, "(?:[\\x00-\\x24\\x26-\\x2C\\x2F\\x3A-\\x40\\x5B-\\x5E\\x60\\x7B-\\x7F]|$)");
