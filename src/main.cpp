@@ -19,7 +19,13 @@ main(int argc, char *argv[])
     // vm.add_rule("/eas?*^easformat=");
     // vm.add_rule("||csdn.net^*/counter.js");
     // vm.add_rule("@@||cdn.api.twitter.com*http%$script,third-party");
+#ifdef CUIMODE
+    int init_i = 1;
+#else
+    int init_i = 2;
+#endif
 
+#ifndef CUIMODE
     if (argc < 2) {
         std::cerr << "usage: " << argv[0] << " urls.txt [filters.txt ...]"
                   << std::endl;
@@ -39,8 +45,10 @@ main(int argc, char *argv[])
     }
 
     std::cout << "loaded " << urls.size() << " urls" << std::endl;
+#endif
 
-    for (int i = 2; i < argc; i++) {
+    for (int i = init_i; i < argc; i++) {
+        std::cout << i << std::endl;
         std::ifstream ifs(argv[i]);
         std::string line;
 
@@ -59,7 +67,7 @@ main(int argc, char *argv[])
         }
     }
 
-    //vm.print_asm();
+    vm.print_asm();
 
     std::cout << "loaded filters\n" << std::endl;
 
