@@ -48,7 +48,6 @@ main(int argc, char *argv[])
 #endif
 
     for (int i = init_i; i < argc; i++) {
-        std::cout << i << std::endl;
         std::ifstream ifs(argv[i]);
         std::string line;
 
@@ -67,7 +66,7 @@ main(int argc, char *argv[])
         }
     }
 
-    vm.print_asm();
+    // vm.print_asm();
 
     std::cout << "loaded filters\n" << std::endl;
 

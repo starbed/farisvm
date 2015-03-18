@@ -338,7 +338,6 @@ abpvm::add_rule(const std::string &rule)
     url_rule = std::regex_replace(url_rule, re_barstar, "");
     url_rule = std::regex_replace(url_rule, re_sepbar, "^");
 
-    std::cout << rule << std::endl;
 
     code.flags = flags;
     code.rule  = url_rule;
@@ -385,8 +384,6 @@ abpvm::get_re(const std::string &rule)
     re_rule = std::regex_replace(re_rule, re_head, "^");  // |foo -> ^foo
     re_rule = std::regex_replace(re_rule, re_star, ".*"); // fo*o -> fo.*o
     re_rule = std::regex_replace(re_rule, re_tail, "$");  // foo| -> foo$
-
-    std::cout << rule << "\n" << re_rule << "\n" << std::endl;
 
 #ifdef USE_RE2
     return std::shared_ptr<RE2>(new RE2(re_rule));

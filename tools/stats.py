@@ -13,7 +13,7 @@ for arg in sys.argv[1:]:
     lines = f.readlines()
     f.close()
 
-    for line in lines:
+    for line in lines[1:]:
         if line == '':
             continue
         elif line[0] == '!':
