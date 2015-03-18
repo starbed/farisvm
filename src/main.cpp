@@ -4,9 +4,12 @@
 #include <fstream>
 #include <chrono>
 
+// #define CUIMODE
+
 int
 main(int argc, char *argv[])
 {
+    std::vector<std::string> urls;
     abpvm vm;
 
     // vm.add_rule("|https:");
@@ -17,7 +20,27 @@ main(int argc, char *argv[])
     // vm.add_rule("||csdn.net^*/counter.js");
     // vm.add_rule("@@||cdn.api.twitter.com*http%$script,third-party");
 
-    for (int i = 1; i < argc; i++) {
+    if (argc < 2) {
+        std::cerr << "usage: " << argv[0] << " urls.txt [filters.txt ...]"
+                  << std::endl;
+        return -1;
+    }
+
+    std::ifstream ifurls(argv[1]);
+    std::string url;
+
+    if (ifurls.fail()) {
+        std::cerr << "cannot read " << argv[1] << std::endl;
+        return -1;
+    }
+
+    while (getline(ifurls, url)) {
+        urls.push_back(url);
+    }
+
+    std::cout << "loaded " << urls.size() << " urls" << std::endl;
+
+    for (int i = 2; i < argc; i++) {
         std::ifstream ifs(argv[i]);
         std::string line;
 
@@ -36,10 +59,11 @@ main(int argc, char *argv[])
         }
     }
 
-    vm.print_asm();
+    //vm.print_asm();
 
     std::cout << "loaded filters\n" << std::endl;
 
+#ifdef CUIMODE
     for (;;) {
         abpvm_query q;
         std::vector<std::string> result;
@@ -62,6 +86,25 @@ main(int argc, char *argv[])
             std::chrono::duration_cast<std::chrono::microseconds>(timeSpan).count()
             << " [us]\n" << std::endl;
     }
+#else
+    const auto startTime = std::chrono::system_clock::now();
+
+    for (std::string &i: urls) {
+        abpvm_query q;
+        q.set_uri(i);
+        std::vector<std::string> result;
+        vm.match(result, &q, 1);
+    }
+
+    const auto endTime = std::chrono::system_clock::now();
+    const auto timeSpan = endTime - startTime;
+
+    std::cout << "#urls: " << urls.size()
+              << "\ntime: " <<
+        std::chrono::duration_cast<std::chrono::microseconds>(timeSpan).count() / (double)1000000.0
+        << " [s]\n" << std::endl;
+#endif // CUIMODE
+
 
     return 0;
 }
