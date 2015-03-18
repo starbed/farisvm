@@ -7,16 +7,20 @@
 
 #define INST_MAX 4096
 
-#define OP_CHAR        0
-#define OP_SKIP_TO     1
-#define OP_SKIP_SCHEME 2
-#define OP_MATCH       3
+#define OP_CHAR        0x00
+#define OP_SKIP_TO     0x80
+#define OP_SKIP_SCHEME 0x83
+#define OP_MATCH       0x84
 
-#define CHAR_TAIL       0
-#define CHAR_HEAD      -1
-#define CHAR_SEPARATOR -2
+#define CHAR_TAIL      0
+#define CHAR_HEAD      1
+#define CHAR_SEPARATOR 2
 
-#define TO_LOWER(CH_) (('A' <= CH_ && CH_ <= 'Z') ? CH_ + ('a' - 'A') : CH_)
+#define IS_OP_CHAR(INST) (!(0x80 & (INST)))
+#define IS_OP_SKIP_SCHEME(INST) ((char)0x83 == (INST))
+#define IS_OP_MATCH(INST) ((char)0x84 == (INST))
+
+#define TO_LOWER(CH_) (('A' <= (CH_) && (CH_) <= 'Z') ? (CH_) + ('a' - 'A') : (CH_))
 #define UNSIGNED(CH_) (int)(unsigned char)(CH_)
 
 // characters for URL by RFC 3986
@@ -38,8 +42,8 @@ int urlchar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // separators
-int sepchar[256] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+int sepchar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
                     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -137,11 +141,11 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
             abpvm_head *head = (abpvm_head*)code.code;
-            abpvm_inst *pc = (abpvm_inst*)(code.code + sizeof(*head));
+            char *pc = code.code + sizeof(*head);
             bool check_head = false;
             bool ret = false;
 
-            if (pc->opcode == OP_CHAR && pc->c == CHAR_HEAD) {
+            if (*pc == CHAR_HEAD) {
                 check_head = true;
                 pc++;
             }
@@ -188,45 +192,23 @@ found:
 }
 
 bool
-abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
+abpvm::vmrun(const abpvm_head *head, const char *pc, const char *sp)
 {
     for (;;) {
-        switch (pc->opcode) {
-        case OP_CHAR:
-        {
-            if (pc->c == CHAR_SEPARATOR) {
+        if (IS_OP_CHAR(*pc)) {
+            if (*pc == CHAR_SEPARATOR) {
                 if (! sepchar[(unsigned char)*sp]) {
                     return false;
                 }
             } else {
-                if (pc->c != *sp) {
+                if (*pc != *sp) {
                     return false;
                 }
             }
             sp++;
-            break;
-        }
-        case OP_SKIP_TO:
-        {
-            if (pc->c == CHAR_SEPARATOR) {
-                while (! sepchar[(unsigned char)*sp]) {
-                    if (*sp == '\0') {
-                        return false;
-                    }
-                    sp++;
-                }
-            } else {
-                while (pc->c != *sp) {
-                    if (*sp == '\0') {
-                        return false;
-                    }
-                    sp++;
-                }
-            }
-            break;
-        }
-        case OP_SKIP_SCHEME:
-        {
+        } else if (IS_OP_MATCH(*pc)) {
+            return true;
+        } else if (IS_OP_SKIP_SCHEME(*pc)) {
             while (*sp !=':') {
                 if (! schemechar[(unsigned char)*sp]) {
                     return false;
@@ -239,10 +221,24 @@ abpvm::vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp)
             while (*sp == '/') {
                 sp++;
             }
-            break;
-        }
-        case OP_MATCH:
-            return true;
+        } else {
+            // skip_to
+            char c = 0x7f & *pc;
+            if (c == CHAR_SEPARATOR) {
+                while (! sepchar[(unsigned char)*sp]) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
+                }
+            } else {
+                while (c != *sp) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
+                }
+            }
         }
 
         pc++;
@@ -264,49 +260,43 @@ abpvm::print_asm()
     for (auto &code: m_codes) {
         std::cout << "\"" << code.rule << "\"" << std::endl;
 
-        abpvm_head *head;
-        abpvm_inst *inst;
-        char *p = code.code;
-
-        head = (abpvm_head*)p;
-        p += sizeof(*head);
+        abpvm_head *head = (abpvm_head*)code.code;
+        char *inst = code.code + sizeof(abpvm_head);
 
         total_inst += head->num_inst;
 
-        for (uint32_t j = 0; j < head->num_inst; j++) {
-            inst = (abpvm_inst*)p;
-            p += sizeof(*inst);
-
-            if (inst->opcode == OP_CHAR) {
+        for (uint32_t j = 0; j < head->num_inst; j++, inst++) {
+            if (IS_OP_CHAR(*inst)) {
                 std::cout << "char ";
                 total_char++;
-                if (inst->c == CHAR_HEAD) {
+                if (*inst == CHAR_HEAD) {
                     std::cout << "head" << std::endl;
-                } else if (inst->c == CHAR_TAIL) {
+                } else if (*inst == CHAR_TAIL) {
                     std::cout << "tail" << std::endl;
-                } else if (inst->c == CHAR_SEPARATOR) {
+                } else if (*inst == CHAR_SEPARATOR) {
                     std::cout << "separator" << std::endl;
                 } else {
-                    std::cout << inst->c << std::endl;
+                    std::cout << *inst << std::endl;
                 }
-            } else if (inst->opcode == OP_MATCH) {
+            } else if (IS_OP_MATCH(*inst)) {
                 std::cout << "match" << std::endl;
                 total_match++;
-            } else if (inst->opcode == OP_SKIP_TO) {
-                std::cout << "skip_to ";
-                total_skip_to++;
-                if (inst->c == CHAR_HEAD) {
-                    std::cout << "head" << std::endl;
-                } else if (inst->c == CHAR_TAIL) {
-                    std::cout << "tail" << std::endl;
-                } else if (inst->c == CHAR_SEPARATOR) {
-                    std::cout << "separator" << std::endl;
-                } else {
-                    std::cout << inst->c << std::endl;
-                }
-            } else if (inst->opcode == OP_SKIP_SCHEME) {
+            } else if (IS_OP_SKIP_SCHEME(*inst)) {
                 std::cout << "skip_scheme" << std::endl;
                 total_skip_scheme++;
+            } else {
+                char c = 0x7f & *inst;
+                std::cout << "skip_to ";
+                total_skip_to++;
+                if (c == CHAR_HEAD) {
+                    std::cout << "head" << std::endl;
+                } else if (c == CHAR_TAIL) {
+                    std::cout << "tail" << std::endl;
+                } else if (c == CHAR_SEPARATOR) {
+                    std::cout << "separator" << std::endl;
+                } else {
+                    std::cout << c << std::endl;
+                }
             }
         }
         std::cout << std::endl;
@@ -484,7 +474,7 @@ char *
 abpvm::get_code(const std::string &rule, uint32_t flags)
 {
     abpvm_head head;
-    abpvm_inst inst[INST_MAX];
+    char inst[INST_MAX];
     const char *sp = rule.c_str();
 
     head.num_inst = 0;
@@ -496,17 +486,13 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
 
     if (sp[0] == '|') {
         if (sp[1] == '|') {
-            inst[0].opcode = OP_CHAR;
-            inst[0].c = CHAR_HEAD;
-
-            inst[1].opcode = OP_SKIP_SCHEME;
-            inst[1].c = 0;
+            inst[0] = CHAR_HEAD;
+            inst[1] = OP_SKIP_SCHEME;
 
             sp += 2;
             head.num_inst += 2;
         } else {
-            inst[0].opcode = OP_CHAR;
-            inst[0].c = CHAR_HEAD;
+            inst[0] = CHAR_HEAD;
 
             sp++;
             head.num_inst++;
@@ -523,16 +509,16 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
         }
 
         if (sp[0] == '*') {
-            inst[head.num_inst].opcode = OP_SKIP_TO;
+            inst[head.num_inst] = OP_SKIP_TO;
 
             if (sp[1] == '^') {
-                inst[head.num_inst].c = CHAR_SEPARATOR;
+                inst[head.num_inst] |= CHAR_SEPARATOR;
             } else {
                 if (urlchar[(unsigned char)sp[1]]) {
                     if (flags & FLAG_MATCH_CASE) {
-                        inst[head.num_inst].c = sp[1];
+                        inst[head.num_inst] |= sp[1];
                     } else {
-                        inst[head.num_inst].c = TO_LOWER(sp[1]);
+                        inst[head.num_inst] |= TO_LOWER(sp[1]);
                     }
                 } else {
                     // invalid character
@@ -546,14 +532,11 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
 
             sp += 2;
         } else if (sp[0] == '^'){
-            inst[head.num_inst].opcode = OP_CHAR;
-            inst[head.num_inst].c = CHAR_SEPARATOR;
-
+            inst[head.num_inst] = CHAR_SEPARATOR;
             sp++;
         } else if (sp[0] == '|') {
             if (sp[1] == '\0') {
-                inst[head.num_inst].opcode = OP_CHAR;
-                inst[head.num_inst].c = CHAR_TAIL;
+                inst[head.num_inst] = CHAR_TAIL;
             } else {
                 // parse error
                 std::ostringstream oss;
@@ -566,12 +549,12 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
             sp++;
         } else {
             if (urlchar[(unsigned char)sp[0]]) {
-                inst[head.num_inst].opcode = OP_CHAR;
+                inst[head.num_inst] = OP_CHAR;
 
                 if (flags & FLAG_MATCH_CASE) {
-                    inst[head.num_inst].c = sp[0];
+                    inst[head.num_inst] = sp[0];
                 } else {
-                    inst[head.num_inst].c = TO_LOWER(sp[0]);
+                    inst[head.num_inst] = TO_LOWER(sp[0]);
                 }
             } else {
                 // invalide character
@@ -588,8 +571,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
         head.num_inst++;
     }
 
-    inst[head.num_inst].opcode = OP_MATCH;
-    inst[head.num_inst].c      = 0;
+    inst[head.num_inst] = OP_MATCH;
     head.num_inst++;
 
     if (head.num_inst > 0) {

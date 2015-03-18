@@ -66,18 +66,13 @@ private:
     struct abpvm_domain {
         abpvm_domain(std::string d) : name(d), bmh(new BMH(d.begin(), d.end())) { }
 
-        std::shared_ptr<BMH> bmh;
         std::string name;
+        std::shared_ptr<BMH> bmh;
     };
 
     struct abpvm_head {
         uint32_t flags;
         uint32_t num_inst;
-    };
-
-    struct abpvm_inst {
-        uint8_t opcode;
-        char    c;
     };
 
     struct abpvm_code {
@@ -91,7 +86,7 @@ private:
 
     std::vector<abpvm_code> m_codes;
 
-    bool vmrun(const abpvm_head *head, const abpvm_inst *pc, const char *sp);
+    bool vmrun(const abpvm_head *head, const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);
