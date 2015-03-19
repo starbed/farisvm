@@ -1,3 +1,5 @@
+var urlFile = "../../urls_1000.txt";
+
 var filterFiles = {
     "../../tools/easylist.txt": "easylist",
     "../../tools/easylist_france.txt": "easylist france",
@@ -10,6 +12,7 @@ var filterFiles = {
     "../../tools/malwaredomains_full.txt": "malwaredomains"};
 
 var fc = require('./filterClasses.js');
+var fs = require('fs');
 
 function filterRule (rule) {
     this.files  = {};
@@ -31,7 +34,6 @@ filterRule.prototype.matches = function (url) {
 }
 
 function loadFilter() {
-    var fs = require('fs');
     var filters = {};
     var n = 0;
 
@@ -67,6 +69,19 @@ function loadFilter() {
 }
 
 var filters = loadFilter();
+var urls = fs.readFileSync(urlFile, 'utf8').split('\n');
+
+var t0 = process.hrtime();
+for (var i = 0; i < 1000; i++) {
+    for (var key in filters) {
+        filters[key].matches(urls[i]);
+    }
+}
+var t1 = process.hrtime(t0);
+
+console.log('%d [s]', Math.round(((t1[0] * 1e9 + t1[1]) / 1000.0)) / 1000000.0 );
+
+/*
 var reader = require('readline').createInterface({
     input: process.stdin,
     output: process.stdout
@@ -93,3 +108,4 @@ reader.on('line', function (line) {
 process.stdin.on('end', function () {
     //do something
 });
+*/
