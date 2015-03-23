@@ -94,6 +94,11 @@ main(int argc, char *argv[])
             << " [us]\n" << std::endl;
     }
 #else
+    abpvm_query q0;
+    q0.set_uri(urls[0]);
+    std::vector<std::string> r0;
+    vm.match(r0, &q0, 1);
+
     const auto startTime = std::chrono::system_clock::now();
 
     for (std::string &i: urls) {

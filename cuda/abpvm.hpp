@@ -82,10 +82,15 @@ private:
         std::string rule;
         uint32_t    flags;
         char       *code;
+        char       *d_code;
     };
 
     std::vector<abpvm_code> m_codes;
 
+    char **m_d_codes;
+    bool   m_need_cu_init = true;
+
+    void init_gpumem();
     bool vmrun(const abpvm_head *head, const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,

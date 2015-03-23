@@ -5,6 +5,8 @@
 #include <sstream>
 #include <regex>
 
+#include <stdio.h>
+
 #define INST_MAX 4096
 
 #define OP_CHAR        0x00
@@ -22,6 +24,17 @@
 
 #define TO_LOWER(CH_) (('A' <= (CH_) && (CH_) <= 'Z') ? (CH_) + ('a' - 'A') : (CH_))
 #define UNSIGNED(CH_) (int)(unsigned char)(CH_)
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void
+gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+    if (code != cudaSuccess) {
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code),
+                file, line);
+        if (abort) exit(code);
+    }
+}
 
 // characters for URL by RFC 3986
 int urlchar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -76,6 +89,66 @@ int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+__constant__ int  d_urlchar[256];
+__constant__ int  d_sepchar[256];
+__constant__ int  d_schemechar[256];
+__constant__ char d_query[1024 * 8];
+
+__device__
+void
+cu_print_asm(char **codes, int num_codes)
+{
+    struct abpvm_head {
+        uint32_t flags;
+        uint32_t num_inst;
+    };
+
+    for (int i = 0; i < 100; i++) {
+        abpvm_head *head = (abpvm_head*)codes[i];
+        char *inst = codes[i] + sizeof(abpvm_head);
+
+        for (uint32_t j = 0; j < head->num_inst; j++, inst++) {
+            if (IS_OP_CHAR(*inst)) {
+                printf("char ");
+                if (*inst == CHAR_HEAD) {
+                    printf("head\n");
+                } else if (*inst == CHAR_TAIL) {
+                    printf("tail\n");
+                } else if (*inst == CHAR_SEPARATOR) {
+                    printf("separator\n");
+                } else {
+                    printf("%c\n", *inst);
+                }
+            } else if (IS_OP_MATCH(*inst)) {
+                printf("match\n");
+            } else if (IS_OP_SKIP_SCHEME(*inst)) {
+                printf("skip_scheme\n");
+            } else {
+                char c = 0x7f & *inst;
+                printf("skip_to ");
+                if (c == CHAR_HEAD) {
+                    printf("head\n");
+                } else if (c == CHAR_TAIL) {
+                    printf("tail\n");
+                } else if (c == CHAR_SEPARATOR) {
+                    printf("separator\n");
+                } else {
+                    printf("%c\n", c);
+                }
+            }
+        }
+
+        printf("\n");
+    }
+}
+
+__global__
+void
+cu_vmrun(char **codes, int num_codes)
+{
+
+};
+
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
 {
 
@@ -121,15 +194,50 @@ abpvm_query::set_uri(const std::string &uri)
     m_domain = uri.substr(begin, end - begin);
 }
 
-abpvm::abpvm()
+abpvm::abpvm() : m_need_cu_init(true)
 {
-
+    gpuErrchk(cudaMemcpyToSymbol(d_urlchar, urlchar, sizeof(urlchar)));
+    gpuErrchk(cudaMemcpyToSymbol(d_sepchar, sepchar, sizeof(sepchar)));
+    gpuErrchk(cudaMemcpyToSymbol(d_schemechar, schemechar, sizeof(schemechar)));
 }
 
 abpvm::~abpvm()
 {
     for (auto &p: m_codes) {
+        cudaFree(p.d_code);
         delete p.code;
+    }
+
+    if (m_d_codes != nullptr) {
+        cudaFree(m_d_codes);
+    }
+}
+
+void
+abpvm::init_gpumem()
+{
+    if (m_need_cu_init) {
+        if (m_d_codes != nullptr){
+            cudaFree(m_d_codes);
+        }
+        gpuErrchk(cudaMalloc((void**)&m_d_codes,
+                             m_codes.size() * sizeof(m_d_codes[0])));
+
+        int num_codes = m_codes.size();
+
+        for (int i = 0; i < num_codes; i++) {
+            abpvm_head *head = (abpvm_head*)m_codes[i].code;
+            uint32_t len = head->num_inst + sizeof(*head);
+            gpuErrchk(cudaMalloc((void**)&m_codes[i].d_code, len));
+            gpuErrchk(cudaMemcpy(m_codes[i].d_code, m_codes[i].code, len,
+                                 cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMemcpy(&m_d_codes[i], &m_codes[i].d_code, sizeof(char*),
+                                 cudaMemcpyHostToDevice));
+        }
+
+        m_need_cu_init = false;
+
+        std::cout << "init rules" << std::endl;
     }
 }
 
@@ -137,6 +245,13 @@ void
 abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
     // TODO: check input
+
+    init_gpumem();
+
+    cu_vmrun<<<1, 1>>>(m_d_codes, m_codes.size());
+    cudaThreadSynchronize();
+
+    return;
 
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
@@ -468,6 +583,8 @@ abpvm::add_rule(const std::string &rule)
 
     if (code.code != nullptr)
         m_codes.push_back(code);
+
+    m_need_cu_init = true;
 }
 
 char *
