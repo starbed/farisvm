@@ -25,6 +25,9 @@
 #define TO_LOWER(CH_) (('A' <= (CH_) && (CH_) <= 'Z') ? (CH_) + ('a' - 'A') : (CH_))
 #define UNSIGNED(CH_) (int)(unsigned char)(CH_)
 
+#define MAX_BLOCK_DIM 256
+#define MIN_BLOCK_DIM 32
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void
 gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -94,18 +97,54 @@ __constant__ int  d_sepchar[256];
 __constant__ int  d_schemechar[256];
 __constant__ char d_query[1024 * 8];
 
+// Beginning of GPU Architecture definitions
+inline int
+_ConvertSMVer2Cores(int major, int minor)
+{
+    // Defines for GPU Architecture types (using the SM version to determine the # of cores per SM
+    typedef struct
+    {
+        int SM; // 0xMm (hexidecimal notation), M = SM Major version, and m = SM minor version
+        int Cores;
+    } sSMtoCores;
+
+    sSMtoCores nGpuArchCoresPerSM[] =
+    {
+        { 0x20, 32 }, // Fermi Generation (SM 2.0) GF100 class
+        { 0x21, 48 }, // Fermi Generation (SM 2.1) GF10x class
+        { 0x30, 192}, // Kepler Generation (SM 3.0) GK10x class
+        { 0x32, 192}, // Kepler Generation (SM 3.2) GK10x class
+        { 0x35, 192}, // Kepler Generation (SM 3.5) GK11x class
+        { 0x37, 192}, // Kepler Generation (SM 3.7) GK21x class
+        { 0x50, 128}, // Maxwell Generation (SM 5.0) GM10x class
+        { 0x52, 128}, // Maxwell Generation (SM 5.2) GM20x class
+        {   -1, -1 }
+    };
+
+    int index = 0;
+
+    while (nGpuArchCoresPerSM[index].SM != -1)
+    {
+        if (nGpuArchCoresPerSM[index].SM == ((major << 4) + minor))
+        {
+            return nGpuArchCoresPerSM[index].Cores;
+        }
+
+        index++;
+    }
+
+    // If we don't find the values, we default use the previous one to run properly
+    printf("MapSMtoCores for SM %d.%d is undefined.  Default to use %d Cores/SM\n", major, minor, nGpuArchCoresPerSM[index-1].Cores);
+    return nGpuArchCoresPerSM[index-1].Cores;
+}
+
 __device__
 void
 cu_print_asm(char **codes, int num_codes)
 {
-    struct abpvm_head {
-        uint32_t flags;
-        uint32_t num_inst;
-    };
-
     for (int i = 0; i < 100; i++) {
-        abpvm_head *head = (abpvm_head*)codes[i];
-        char *inst = codes[i] + sizeof(abpvm_head);
+        abpvm::abpvm_head *head = (abpvm::abpvm_head*)codes[i];
+        char *inst = codes[i] + sizeof(abpvm::abpvm_head);
 
         for (uint32_t j = 0; j < head->num_inst; j++, inst++) {
             if (IS_OP_CHAR(*inst)) {
@@ -146,7 +185,12 @@ __global__
 void
 cu_vmrun(char **codes, int num_codes)
 {
+    abpvm::abpvm_head *head;
+    char *pc, *sp = d_query;
 
+    if (blockIdx.x == 0 && threadIdx.x == 0) {
+        printf("num_codes = %d\n", num_codes);
+    }
 };
 
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
@@ -194,11 +238,13 @@ abpvm_query::set_uri(const std::string &uri)
     m_domain = uri.substr(begin, end - begin);
 }
 
-abpvm::abpvm() : m_need_cu_init(true)
+abpvm::abpvm() : m_need_cu_init(true), m_grid_dim(32), m_block_dim(256)
 {
     gpuErrchk(cudaMemcpyToSymbol(d_urlchar, urlchar, sizeof(urlchar)));
     gpuErrchk(cudaMemcpyToSymbol(d_sepchar, sepchar, sizeof(sepchar)));
     gpuErrchk(cudaMemcpyToSymbol(d_schemechar, schemechar, sizeof(schemechar)));
+
+    get_gpu_prop();
 }
 
 abpvm::~abpvm()
@@ -214,11 +260,28 @@ abpvm::~abpvm()
 }
 
 void
-abpvm::init_gpumem()
+abpvm::get_gpu_prop()
+{
+    int deviceCount = 0;
+    gpuErrchk(cudaGetDeviceCount(&deviceCount));
+
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);
+
+    m_grid_dim = _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor) * deviceProp.multiProcessorCount;
+
+    std::cout << m_grid_dim << std::endl;
+}
+
+void
+abpvm::init_gpu()
 {
     if (m_need_cu_init) {
         if (m_d_codes != nullptr){
             cudaFree(m_d_codes);
+            for (auto &code: m_codes) {
+                cudaFree(code.d_code);
+            }
         }
         gpuErrchk(cudaMalloc((void**)&m_d_codes,
                              m_codes.size() * sizeof(m_d_codes[0])));
@@ -239,6 +302,15 @@ abpvm::init_gpumem()
 
         std::cout << "init rules" << std::endl;
     }
+
+    int dim;
+    for (dim = MIN_BLOCK_DIM; dim < MAX_BLOCK_DIM; dim += 32) {
+        if (m_codes.size() <= m_grid_dim * dim) {
+            break;
+        }
+    }
+
+    m_block_dim = dim;
 }
 
 void
@@ -246,9 +318,9 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 {
     // TODO: check input
 
-    init_gpumem();
+    init_gpu();
 
-    cu_vmrun<<<1, 1>>>(m_d_codes, m_codes.size());
+    cu_vmrun<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size());
     cudaThreadSynchronize();
 
     return;

@@ -53,6 +53,11 @@ public:
         std::string rule;
     };
 
+    struct abpvm_head {
+        uint32_t flags;
+        uint32_t num_inst;
+    };
+
     abpvm();
     virtual ~abpvm();
 
@@ -70,11 +75,6 @@ private:
         std::shared_ptr<BMH> bmh;
     };
 
-    struct abpvm_head {
-        uint32_t flags;
-        uint32_t num_inst;
-    };
-
     struct abpvm_code {
         std::vector<abpvm_domain> domains;
         std::vector<abpvm_domain> ex_domains;
@@ -88,9 +88,12 @@ private:
     std::vector<abpvm_code> m_codes;
 
     char **m_d_codes;
-    bool   m_need_cu_init = true;
+    bool   m_need_cu_init;
+    int    m_grid_dim;
+    int    m_block_dim;
 
-    void init_gpumem();
+    void get_gpu_prop();
+    void init_gpu();
     bool vmrun(const abpvm_head *head, const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,
