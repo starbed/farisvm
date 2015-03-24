@@ -40,11 +40,15 @@ class abpvm_query {
 public:
     void set_uri(const std::string &uri);
     const std::string &get_uri() const { return m_uri; }
+    const std::string &get_uri_lower() const { return m_uri_lower; }
     const std::string &get_domain() const { return m_domain; }
+    const std::string &get_domain_lower() const { return m_domain_lower; }
 
 private:
     std::string m_uri;
+    std::string m_uri_lower;
     std::string m_domain;
+    std::string m_domain_lower;
 };
 
 class abpvm {
@@ -88,13 +92,13 @@ private:
     std::vector<abpvm_code> m_codes;
 
     char **m_d_codes;
-    bool   m_need_cu_init;
+    bool   m_need_gpu_init;
     int    m_grid_dim;
     int    m_block_dim;
 
     void get_gpu_prop();
     void init_gpu();
-    bool vmrun(const abpvm_head *head, const char *pc, const char *sp);
+    bool vmrun(const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);

@@ -96,6 +96,9 @@ void
 abpvm_query::set_uri(const std::string &uri)
 {
     m_uri = uri;
+    m_uri_lower = uri;
+    std::transform(m_uri_lower.begin(), m_uri_lower.end(),
+                   m_uri_lower.begin(), ::tolower);
 
     size_t colon = m_uri.find(":");
     if (colon == std::string::npos) {
@@ -119,6 +122,10 @@ abpvm_query::set_uri(const std::string &uri)
     }
 
     m_domain = uri.substr(begin, end - begin);
+
+    m_domain_lower = m_domain;
+    std::transform(m_domain_lower.begin(), m_domain_lower.end(),
+                   m_domain_lower.begin(), ::tolower);
 }
 
 abpvm::abpvm()
@@ -140,8 +147,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
-            abpvm_head *head = (abpvm_head*)code.code;
-            char *pc = code.code + sizeof(*head);
+            char *pc = code.code + sizeof(abpvm_head);
             bool check_head = false;
             bool ret = false;
 
@@ -150,11 +156,18 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                 pc++;
             }
 
-            const std::string &uri(query[i].get_uri());
-            for (int j = 0; j < uri.size(); j++) {
-                const char *sp = uri.c_str() + j;
+            const std::string *uri;
 
-                ret = vmrun(head, pc, sp);
+            if (code.flags & FLAG_MATCH_CASE) {
+                uri = &query[i].get_uri();
+            } else {
+                uri = &query[i].get_uri_lower();
+            }
+
+            for (int j = 0; j < uri->size(); j++) {
+                const char *sp = uri->c_str() + j;
+
+                ret = vmrun(pc, sp);
 
                 if (ret || check_head) {
                     break;
@@ -165,19 +178,26 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                 // TODO: check options
                 // check domains
                 if (code.flags & FLAG_DOMAIN) {
-                    const std::string &qd(query[i].get_domain());
+                    const std::string *qd;
+
+                    if (code.flags & FLAG_MATCH_CASE) {
+                        qd = &query[i].get_domain();
+                    } else {
+                        qd = &query[i].get_domain_lower();
+                    }
+
                     std::string::const_iterator search_result;
 
                     for (auto &d: code.ex_domains) {
-                        search_result = (*d.bmh)(qd.begin(), qd.end());
-                        if (search_result == qd.end()) {
+                        search_result = (*d.bmh)(qd->begin(), qd->end());
+                        if (search_result == qd->end()) {
                             continue;
                         }
                     }
 
                     for (auto &d: code.domains) {
-                        search_result = (*d.bmh)(qd.begin(), qd.end());
-                        if (search_result != qd.end()) {
+                        search_result = (*d.bmh)(qd->begin(), qd->end());
+                        if (search_result != qd->end()) {
                             goto found;
                         }
                     }
@@ -192,7 +212,7 @@ found:
 }
 
 bool
-abpvm::vmrun(const abpvm_head *head, const char *pc, const char *sp)
+abpvm::vmrun(const char *pc, const char *sp)
 {
     for (;;) {
         if (IS_OP_CHAR(*pc)) {

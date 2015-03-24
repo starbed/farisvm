@@ -99,6 +99,8 @@ main(int argc, char *argv[])
     std::vector<std::string> r0;
     vm.match(r0, &q0, 1);
 
+    std::cout << "initialized" << std::endl;
+
     const auto startTime = std::chrono::system_clock::now();
 
     for (std::string &i: urls) {

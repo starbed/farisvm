@@ -28,6 +28,12 @@
 #define MAX_BLOCK_DIM 256
 #define MIN_BLOCK_DIM 32
 
+#define SHM_SIZE 49152
+
+#define MAX_CODE_SIZE (SHM_SIZE / MAX_BLOCK_DIM)
+
+#define MAX_QUERY_LEN (1024 * 16)
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void
 gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -95,7 +101,8 @@ int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 __constant__ int  d_urlchar[256];
 __constant__ int  d_sepchar[256];
 __constant__ int  d_schemechar[256];
-__constant__ char d_query[1024 * 8];
+__constant__ char d_query[MAX_QUERY_LEN];
+__constant__ char d_query_lower[MAX_QUERY_LEN];
 
 // Beginning of GPU Architecture definitions
 inline int
@@ -140,56 +147,76 @@ _ConvertSMVer2Cores(int major, int minor)
 
 __device__
 void
-cu_print_asm(char **codes, int num_codes)
+gpu_print_asm(char *code, int num_inst)
 {
-    for (int i = 0; i < 100; i++) {
-        abpvm::abpvm_head *head = (abpvm::abpvm_head*)codes[i];
-        char *inst = codes[i] + sizeof(abpvm::abpvm_head);
-
-        for (uint32_t j = 0; j < head->num_inst; j++, inst++) {
-            if (IS_OP_CHAR(*inst)) {
-                printf("char ");
-                if (*inst == CHAR_HEAD) {
-                    printf("head\n");
-                } else if (*inst == CHAR_TAIL) {
-                    printf("tail\n");
-                } else if (*inst == CHAR_SEPARATOR) {
-                    printf("separator\n");
-                } else {
-                    printf("%c\n", *inst);
-                }
-            } else if (IS_OP_MATCH(*inst)) {
-                printf("match\n");
-            } else if (IS_OP_SKIP_SCHEME(*inst)) {
-                printf("skip_scheme\n");
+    for (int i = 0; i < num_inst; i++) {
+        if (IS_OP_CHAR(*code)) {
+            printf("char ");
+            if (*code == CHAR_HEAD) {
+                printf("head\n");
+            } else if (*code == CHAR_TAIL) {
+                printf("tail\n");
+            } else if (*code == CHAR_SEPARATOR) {
+                printf("separator\n");
             } else {
-                char c = 0x7f & *inst;
-                printf("skip_to ");
-                if (c == CHAR_HEAD) {
-                    printf("head\n");
-                } else if (c == CHAR_TAIL) {
-                    printf("tail\n");
-                } else if (c == CHAR_SEPARATOR) {
-                    printf("separator\n");
-                } else {
-                    printf("%c\n", c);
-                }
+                printf("%c\n", *code);
+            }
+        } else if (IS_OP_MATCH(*code)) {
+            printf("match\n");
+            return;
+        } else if (IS_OP_SKIP_SCHEME(*code)) {
+            printf("skip_scheme\n");
+        } else {
+            char c = 0x7f & *code;
+            printf("skip_to ");
+            if (c == CHAR_HEAD) {
+                printf("head\n");
+            } else if (c == CHAR_TAIL) {
+                printf("tail\n");
+            } else if (c == CHAR_SEPARATOR) {
+                printf("separator\n");
+            } else {
+                printf("%c\n", c);
             }
         }
 
-        printf("\n");
+        code++;
     }
+}
+
+__device__
+bool
+gpu_vmrun(char *pc, char *sp, int num_inst)
+{
+    for (int i = 0; i < num_inst; i++) {
+
+    }
+
+    return false;
 }
 
 __global__
 void
-cu_vmrun(char **codes, int num_codes)
+gpu_match(char **codes, int num_codes)
 {
-    abpvm::abpvm_head *head;
-    char *pc, *sp = d_query;
+    int idx = threadIdx.x * gridDim.x + blockIdx.x;
 
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("num_codes = %d\n", num_codes);
+    while (idx < num_codes) {
+        char *sp;
+        char *pc = codes[idx];
+        abpvm::abpvm_head *head = (abpvm::abpvm_head*)pc;
+
+        pc += sizeof(*head);
+
+        if (head->flags & FLAG_MATCH_CASE) {
+            sp = d_query;
+        } else {
+            sp = d_query_lower;
+        }
+
+        gpu_vmrun(pc, sp, head->num_inst);
+
+        idx += gridDim.x * blockDim.x;
     }
 };
 
@@ -213,6 +240,9 @@ void
 abpvm_query::set_uri(const std::string &uri)
 {
     m_uri = uri;
+    m_uri_lower = uri;
+    std::transform(m_uri_lower.begin(), m_uri_lower.end(),
+                   m_uri_lower.begin(), ::tolower);
 
     size_t colon = m_uri.find(":");
     if (colon == std::string::npos) {
@@ -236,13 +266,19 @@ abpvm_query::set_uri(const std::string &uri)
     }
 
     m_domain = uri.substr(begin, end - begin);
+
+    m_domain_lower = m_domain;
+    std::transform(m_domain_lower.begin(), m_domain_lower.end(),
+                   m_domain_lower.begin(), ::tolower);
 }
 
-abpvm::abpvm() : m_need_cu_init(true), m_grid_dim(32), m_block_dim(256)
+abpvm::abpvm() : m_need_gpu_init(true), m_grid_dim(32), m_block_dim(256)
 {
     gpuErrchk(cudaMemcpyToSymbol(d_urlchar, urlchar, sizeof(urlchar)));
     gpuErrchk(cudaMemcpyToSymbol(d_sepchar, sepchar, sizeof(sepchar)));
     gpuErrchk(cudaMemcpyToSymbol(d_schemechar, schemechar, sizeof(schemechar)));
+
+    gpuErrchk(cudaFuncSetCacheConfig(gpu_match, cudaFuncCachePreferL1));
 
     get_gpu_prop();
 }
@@ -276,7 +312,7 @@ abpvm::get_gpu_prop()
 void
 abpvm::init_gpu()
 {
-    if (m_need_cu_init) {
+    if (m_need_gpu_init) {
         if (m_d_codes != nullptr){
             cudaFree(m_d_codes);
             for (auto &code: m_codes) {
@@ -298,7 +334,7 @@ abpvm::init_gpu()
                                  cudaMemcpyHostToDevice));
         }
 
-        m_need_cu_init = false;
+        m_need_gpu_init = false;
 
         std::cout << "init rules" << std::endl;
     }
@@ -317,69 +353,33 @@ void
 abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
     // TODO: check input
-
     init_gpu();
 
-    cu_vmrun<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size());
-    cudaThreadSynchronize();
-
-    return;
-
     for (int i = 0; i < size; i++) {
-        for (auto &code: m_codes) {
-            abpvm_head *head = (abpvm_head*)code.code;
-            char *pc = code.code + sizeof(*head);
-            bool check_head = false;
-            bool ret = false;
+        const std::string &uri(query[i].get_uri());
+        const std::string &uri_lower(query[i].get_uri_lower());
+        if (uri.size() < MAX_QUERY_LEN) {
 
-            if (*pc == CHAR_HEAD) {
-                check_head = true;
-                pc++;
-            }
+            gpuErrchk(cudaMemcpyToSymbol(d_query,
+                                         query[i].get_uri().c_str(),
+                                         query[i].get_uri().size() + 1));
+            gpuErrchk(cudaMemcpyToSymbol(d_query_lower,
+                                         query[i].get_uri_lower().c_str(),
+                                         query[i].get_uri_lower().size() + 1));
 
-            const std::string &uri(query[i].get_uri());
-            for (int j = 0; j < uri.size(); j++) {
-                const char *sp = uri.c_str() + j;
+            gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size());
 
-                ret = vmrun(head, pc, sp);
+            //cudaThreadSynchronize();
 
-                if (ret || check_head) {
-                    break;
-                }
-            }
-
-            if (ret) {
-                // TODO: check options
-                // check domains
-                if (code.flags & FLAG_DOMAIN) {
-                    const std::string &qd(query[i].get_domain());
-                    std::string::const_iterator search_result;
-
-                    for (auto &d: code.ex_domains) {
-                        search_result = (*d.bmh)(qd.begin(), qd.end());
-                        if (search_result == qd.end()) {
-                            continue;
-                        }
-                    }
-
-                    for (auto &d: code.domains) {
-                        search_result = (*d.bmh)(qd.begin(), qd.end());
-                        if (search_result != qd.end()) {
-                            goto found;
-                        }
-                    }
-
-                    continue;
-                }
-found:
-                result.push_back(code.original_rule);
-            }
+            // TODO: check flags
+        } else {
+            // TODO: match by CPU
         }
     }
 }
 
 bool
-abpvm::vmrun(const abpvm_head *head, const char *pc, const char *sp)
+abpvm::vmrun(const char *pc, const char *sp)
 {
     for (;;) {
         if (IS_OP_CHAR(*pc)) {
@@ -656,7 +656,7 @@ abpvm::add_rule(const std::string &rule)
     if (code.code != nullptr)
         m_codes.push_back(code);
 
-    m_need_cu_init = true;
+    m_need_gpu_init = true;
 }
 
 char *
