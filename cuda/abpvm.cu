@@ -232,7 +232,6 @@ void
 gpu_match(char **codes, int num_codes, int urllen, int scheme_len,
           char *query, char *query_lower)
 {
-    //int idx = threadIdx.x * gridDim.x + blockIdx.x;
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     while (idx < num_codes) {
@@ -421,8 +420,6 @@ abpvm::get_gpu_prop()
     cudaGetDeviceProperties(&deviceProp, 0);
 
     m_grid_dim = _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor) * deviceProp.multiProcessorCount;
-
-    std::cout << m_grid_dim << std::endl;
 }
 
 void
@@ -463,10 +460,6 @@ abpvm::init_gpu()
                          return 0;
                      });
 
-        for (auto &code: m_codes) {
-            std::cout << code->rule << std::endl;
-        }
-
         int num_codes = m_codes.size();
 
         for (int i = 0; i < num_codes; i++) {
@@ -480,8 +473,6 @@ abpvm::init_gpu()
         }
 
         m_need_gpu_init = false;
-
-        std::cout << "init rules" << std::endl;
     }
 
     int dim;
@@ -934,12 +925,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
     head.num_inst++;
 
     if (head.num_inst > 0) {
-        char *code;
-        code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
-/*
-        gpuErrchk(cudaMallocHost((void**)&code,
-                                 sizeof(head) + sizeof(inst[0]) * head.num_inst));
-*/
+        char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
         memcpy(code, &head, sizeof(head));
         memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
 
