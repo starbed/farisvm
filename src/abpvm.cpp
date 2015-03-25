@@ -169,7 +169,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
                 ret = vmrun(pc, sp);
 
-                if (ret || check_head) {
+                if (check_head || ret) {
                     break;
                 }
             }

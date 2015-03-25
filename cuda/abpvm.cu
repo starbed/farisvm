@@ -25,14 +25,14 @@
 #define TO_LOWER(CH_) (('A' <= (CH_) && (CH_) <= 'Z') ? (CH_) + ('a' - 'A') : (CH_))
 #define UNSIGNED(CH_) (int)(unsigned char)(CH_)
 
-#define MAX_BLOCK_DIM 256
+#define MAX_BLOCK_DIM 4096
 #define MIN_BLOCK_DIM 32
 
 #define SHM_SIZE 49152
 
 #define MAX_CODE_SIZE (SHM_SIZE / MAX_BLOCK_DIM)
 
-#define MAX_QUERY_LEN (1024 * 16)
+#define MAX_QUERY_LEN (1024 * 32)
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void
@@ -101,8 +101,6 @@ int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 __constant__ int  d_urlchar[256];
 __constant__ int  d_sepchar[256];
 __constant__ int  d_schemechar[256];
-__constant__ char d_query[MAX_QUERY_LEN];
-__constant__ char d_query_lower[MAX_QUERY_LEN];
 
 // Beginning of GPU Architecture definitions
 inline int
@@ -189,17 +187,53 @@ bool
 gpu_vmrun(char *pc, char *sp, int num_inst)
 {
     for (int i = 0; i < num_inst; i++) {
+        if (IS_OP_CHAR(*pc)) {
+            if (*pc == CHAR_SEPARATOR) {
+                if (! d_sepchar[(unsigned char)*sp]) {
+                    return false;
+                }
+            } else {
+                if (*pc != *sp) {
+                    return false;
+                }
+            }
+            sp++;
+        } else if (IS_OP_MATCH(*pc)) {
+            return true;
+        } else {
+            // skip_to
+            char c = 0x7f & *pc;
+            if (c == CHAR_SEPARATOR) {
+                while (! d_sepchar[(unsigned char)*sp]) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
+                }
+            } else {
+                while (c != *sp) {
+                    if (*sp == '\0') {
+                        return false;
+                    }
+                    sp++;
+                }
+            }
+        }
 
+        pc++;
     }
 
+    // never reach here
     return false;
 }
 
 __global__
 void
-gpu_match(char **codes, int num_codes)
+gpu_match(char **codes, int num_codes, int urllen, int scheme_len,
+          char *query, char *query_lower)
 {
-    int idx = threadIdx.x * gridDim.x + blockIdx.x;
+    //int idx = threadIdx.x * gridDim.x + blockIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     while (idx < num_codes) {
         char *sp;
@@ -209,12 +243,35 @@ gpu_match(char **codes, int num_codes)
         pc += sizeof(*head);
 
         if (head->flags & FLAG_MATCH_CASE) {
-            sp = d_query;
+            sp = query;
         } else {
-            sp = d_query_lower;
+            sp = query_lower;
         }
 
-        gpu_vmrun(pc, sp, head->num_inst);
+        bool ret;
+        bool check_head = false;
+        if (*pc == CHAR_HEAD) {
+            check_head = true;
+            pc++;
+            if (IS_OP_SKIP_SCHEME(*pc)) {
+                pc++;
+                sp += scheme_len;
+            }
+        }
+
+        for (int i = 0; i < urllen; i++) {
+            ret = gpu_vmrun(pc, sp, head->num_inst);
+
+            if (check_head || ret) {
+                break;
+            }
+
+            sp++;
+        }
+
+        if (ret) {
+            //gpu_print_asm(pc, head->num_inst);
+        }
 
         idx += gridDim.x * blockDim.x;
     }
@@ -280,6 +337,9 @@ abpvm::abpvm() : m_need_gpu_init(true), m_grid_dim(32), m_block_dim(256)
 
     gpuErrchk(cudaFuncSetCacheConfig(gpu_match, cudaFuncCachePreferL1));
 
+    gpuErrchk(cudaMalloc((void**)&m_d_query, MAX_QUERY_LEN));
+    gpuErrchk(cudaMalloc((void**)&m_d_query_lower, MAX_QUERY_LEN));
+
     get_gpu_prop();
 }
 
@@ -293,6 +353,9 @@ abpvm::~abpvm()
     if (m_d_codes != nullptr) {
         cudaFree(m_d_codes);
     }
+
+    cudaFree(m_d_query);
+    cudaFree(m_d_query_lower);
 }
 
 void
@@ -349,6 +412,29 @@ abpvm::init_gpu()
     m_block_dim = dim;
 }
 
+int
+abpvm::skip_scheme(const char *sp)
+{
+    int i = 0;
+    while (*sp !=':') {
+        if (! schemechar[(unsigned char)*sp]) {
+            return false;
+        }
+        sp++;
+        i++;
+    }
+
+    sp++;
+    i++;
+
+    while (*sp == '/') {
+        sp++;
+        i++;
+    }
+
+    return i;
+}
+
 void
 abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
@@ -358,16 +444,24 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
     for (int i = 0; i < size; i++) {
         const std::string &uri(query[i].get_uri());
         const std::string &uri_lower(query[i].get_uri_lower());
+
+        int scheme_len = skip_scheme(uri_lower.c_str());
+
         if (uri.size() < MAX_QUERY_LEN) {
+/*
+            gpuErrchk(cudaMemcpyToSymbol(d_query, uri.c_str(), uri.size()));
+            gpuErrchk(cudaMemcpyToSymbol(d_query_lower, uri_lower.c_str(),
+                                         uri_lower.size()));
+*/
 
-            gpuErrchk(cudaMemcpyToSymbol(d_query,
-                                         query[i].get_uri().c_str(),
-                                         query[i].get_uri().size() + 1));
-            gpuErrchk(cudaMemcpyToSymbol(d_query_lower,
-                                         query[i].get_uri_lower().c_str(),
-                                         query[i].get_uri_lower().size() + 1));
+            gpuErrchk(cudaMemcpy(m_d_query, uri.c_str(), uri.size() + 1,
+                                 cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMemcpy(m_d_query_lower, uri_lower.c_str(), uri_lower.size() + 1,
+                                 cudaMemcpyHostToDevice));
 
-            gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size());
+            gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size(),
+                                                   uri.size(), scheme_len,
+                                                   m_d_query, m_d_query_lower);
 
             //cudaThreadSynchronize();
 
