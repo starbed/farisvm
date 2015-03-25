@@ -455,13 +455,17 @@ abpvm::init_gpu()
                          int ret = memcmp(lc, rc, len);
 
                          if (ret < 0) {
-                             return true;
+                             return 1;
                          } else if (ret > 0) {
-                             return false;
+                             return -1;
                          }
 
-                         return lhead->num_inst < rhead->num_inst;
+                         return 0;
                      });
+
+        for (auto &code: m_codes) {
+            std::cout << code->rule << std::endl;
+        }
 
         int num_codes = m_codes.size();
 
