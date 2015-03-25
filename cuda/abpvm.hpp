@@ -94,7 +94,7 @@ private:
         char       *d_code;
     };
 
-    std::vector<abpvm_code> m_codes;
+    std::vector<std::shared_ptr<abpvm_code>> m_codes;
 
     char **m_d_codes;
     char  *m_d_query;

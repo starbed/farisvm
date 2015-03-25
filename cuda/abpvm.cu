@@ -277,6 +277,29 @@ gpu_match(char **codes, int num_codes, int urllen, int scheme_len,
     }
 };
 
+bool
+code_cmp(const char *lhs, const char *rhs)
+{
+    abpvm::abpvm_head *lhead, *rhead;
+
+    lhead = (abpvm::abpvm_head*)lhs;
+    rhead = (abpvm::abpvm_head*)rhs;
+
+    lhs += sizeof(*lhead);
+    rhs += sizeof(*rhead);
+
+    int len = lhead->num_inst < rhead->num_inst ? lhead->num_inst : rhead->num_inst;
+
+    int ret = memcmp(lhs, rhs, len);
+    if (ret < 0) {
+        return true;
+    } else if (ret > 0) {
+        return false;
+    } else {
+        return lhead->num_inst < rhead->num_inst;
+    }
+}
+
 abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
 {
 
@@ -371,8 +394,8 @@ abpvm::abpvm() : m_need_gpu_init(true), m_grid_dim(32), m_block_dim(256)
 abpvm::~abpvm()
 {
     for (auto &p: m_codes) {
-        gpuErrchk(cudaFree(p.d_code));
-        gpuErrchk(cudaFreeHost(p.code));
+        gpuErrchk(cudaFree(p->d_code));
+        gpuErrchk(cudaFreeHost(p->code));
     }
 
     if (m_d_codes != nullptr) {
@@ -404,21 +427,46 @@ abpvm::init_gpu()
         if (m_d_codes != nullptr){
             cudaFree(m_d_codes);
             for (auto &code: m_codes) {
-                cudaFree(code.d_code);
+                cudaFree(code->d_code);
             }
         }
         gpuErrchk(cudaMalloc((void**)&m_d_codes,
                              m_codes.size() * sizeof(m_d_codes[0])));
 
+        std::sort(m_codes.begin(), m_codes.end(),
+                  [](const std::shared_ptr<abpvm_code> &lhs,
+                     const std::shared_ptr<abpvm_code> &rhs)
+                     {
+                         abpvm_head *rhead, *lhead;
+                         char *rc, *lc;
+
+                         rhead = (abpvm_head*)lhs->code;
+                         lhead = (abpvm_head*)rhs->code;
+
+                         rc = lhs->code + sizeof(rhead);
+                         lc = lhs->code + sizeof(lhead);
+
+                         int len = (lhead->num_inst < rhead->num_inst) ? lhead->num_inst : rhead->num_inst;
+                         int ret = memcmp(lc, rc, len);
+
+                         if (ret < 0) {
+                             return true;
+                         } else if (ret > 0) {
+                             return false;
+                         }
+
+                         return lhead->num_inst < rhead->num_inst;
+                     });
+
         int num_codes = m_codes.size();
 
         for (int i = 0; i < num_codes; i++) {
-            abpvm_head *head = (abpvm_head*)m_codes[i].code;
+            abpvm_head *head = (abpvm_head*)m_codes[i]->code;
             uint32_t len = head->num_inst + sizeof(*head);
-            gpuErrchk(cudaMalloc((void**)&m_codes[i].d_code, len));
-            gpuErrchk(cudaMemcpy(m_codes[i].d_code, m_codes[i].code, len,
+            gpuErrchk(cudaMalloc((void**)&m_codes[i]->d_code, len));
+            gpuErrchk(cudaMemcpy(m_codes[i]->d_code, m_codes[i]->code, len,
                                  cudaMemcpyHostToDevice));
-            gpuErrchk(cudaMemcpy(&m_d_codes[i], &m_codes[i].d_code, sizeof(char*),
+            gpuErrchk(cudaMemcpy(&m_d_codes[i], &m_codes[i]->d_code, sizeof(char*),
                                  cudaMemcpyHostToDevice));
         }
 
@@ -558,10 +606,10 @@ abpvm::print_asm()
     int total_match = 0;
 
     for (auto &code: m_codes) {
-        std::cout << "\"" << code.rule << "\"" << std::endl;
+        std::cout << "\"" << code->rule << "\"" << std::endl;
 
-        abpvm_head *head = (abpvm_head*)code.code;
-        char *inst = code.code + sizeof(abpvm_head);
+        abpvm_head *head = (abpvm_head*)code->code;
+        char *inst = code->code + sizeof(abpvm_head);
 
         total_inst += head->num_inst;
 
@@ -630,7 +678,7 @@ abpvm::add_rule(const std::string &rule)
 {
     std::vector<std::string> sp;
     std::string url_rule;
-    abpvm_code code;
+    std::shared_ptr<abpvm_code> code(new abpvm_code);
     uint32_t flags = 0;
 
     // do not add empty rules
@@ -721,12 +769,12 @@ abpvm::add_rule(const std::string &rule)
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
                                 abpvm_domain domain(d);
-                                code.ex_domains.push_back(domain);
+                                code->ex_domains.push_back(domain);
                             } else {
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
                                 abpvm_domain domain(d);
-                                code.domains.push_back(domain);
+                                code->domains.push_back(domain);
                             }
                         }
 
@@ -760,13 +808,13 @@ abpvm::add_rule(const std::string &rule)
     url_rule = std::regex_replace(url_rule, re_barstar, "");
     url_rule = std::regex_replace(url_rule, re_sepbar, "^");
 
-    code.flags = flags;
-    code.rule  = url_rule;
-    code.code  = get_code(url_rule, flags);
+    code->flags = flags;
+    code->rule  = url_rule;
+    code->code  = get_code(url_rule, flags);
 
-    code.original_rule = rule;
+    code->original_rule = rule;
 
-    if (code.code != nullptr)
+    if (code->code != nullptr)
         m_codes.push_back(code);
 
     m_need_gpu_init = true;
@@ -879,7 +927,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
     if (head.num_inst > 0) {
         char *code;
         gpuErrchk(cudaMallocHost((void**)&code,
-                  sizeof(head) + sizeof(inst[0]) * head.num_inst));
+                                 sizeof(head) + sizeof(inst[0]) * head.num_inst));
 
         memcpy(code, &head, sizeof(head));
         memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
