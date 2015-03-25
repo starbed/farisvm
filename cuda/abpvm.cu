@@ -101,8 +101,6 @@ int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 __constant__ int  d_urlchar[256];
 __constant__ int  d_sepchar[256];
 __constant__ int  d_schemechar[256];
-__constant__ char d_query[MAX_QUERY_LEN];
-__constant__ char d_query_lower[MAX_QUERY_LEN];
 
 // Beginning of GPU Architecture definitions
 inline int
@@ -450,17 +448,11 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
         int scheme_len = skip_scheme(uri_lower.c_str());
 
         if (uri.size() < MAX_QUERY_LEN) {
-
-            gpuErrchk(cudaMemcpyToSymbol(d_query, uri.c_str(), uri.size()));
-            gpuErrchk(cudaMemcpyToSymbol(d_query_lower, uri_lower.c_str(),
-                                         uri_lower.size()));
-
-/*
             gpuErrchk(cudaMemcpy(m_d_query, uri.c_str(), uri.size() + 1,
                                  cudaMemcpyHostToDevice));
             gpuErrchk(cudaMemcpy(m_d_query_lower, uri_lower.c_str(), uri_lower.size() + 1,
                                  cudaMemcpyHostToDevice));
-*/
+
             gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size(),
                                                    uri.size(), scheme_len,
                                                    m_d_query, m_d_query_lower);
