@@ -38,15 +38,20 @@
 
 class abpvm_query {
 public:
+    abpvm_query();
+    virtual ~abpvm_query();
+
     void set_uri(const std::string &uri);
-    const std::string &get_uri() const { return m_uri; }
-    const std::string &get_uri_lower() const { return m_uri_lower; }
+    int  get_len() const { return m_len; }
+    const char *get_uri() const { return m_uri; }
+    const char *get_uri_lower() const { return m_uri_lower; }
     const std::string &get_domain() const { return m_domain; }
     const std::string &get_domain_lower() const { return m_domain_lower; }
 
 private:
-    std::string m_uri;
-    std::string m_uri_lower;
+    char *m_uri;
+    char *m_uri_lower;
+    int   m_len;
     std::string m_domain;
     std::string m_domain_lower;
 };

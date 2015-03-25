@@ -293,32 +293,57 @@ abpvm_exception::what() const throw()
     return m_msg.c_str();
 }
 
+abpvm_query::abpvm_query()
+{
+    gpuErrchk(cudaMallocHost((void**)&m_uri, MAX_QUERY_LEN));
+    gpuErrchk(cudaMallocHost((void**)&m_uri_lower, MAX_QUERY_LEN));
+}
+
+abpvm_query::~abpvm_query()
+{
+    gpuErrchk(cudaFreeHost(m_uri));
+    gpuErrchk(cudaFreeHost(m_uri_lower));
+}
+
 void
 abpvm_query::set_uri(const std::string &uri)
 {
-    m_uri = uri;
-    m_uri_lower = uri;
-    std::transform(m_uri_lower.begin(), m_uri_lower.end(),
-                   m_uri_lower.begin(), ::tolower);
+    int len;
+    if (uri.size() + 1 > MAX_QUERY_LEN) {
+        len = MAX_QUERY_LEN - 1;
+    } else {
+        len = uri.size();
+    }
 
-    size_t colon = m_uri.find(":");
+    m_len = len + 1;
+
+    memcpy(m_uri, uri.c_str(), len);
+    memcpy(m_uri_lower, uri.c_str(), len);
+
+    m_uri[len] = '\0';
+    m_uri_lower[len] = '\0';
+
+    std::transform(m_uri_lower, m_uri_lower + len,
+                   m_uri_lower, ::tolower);
+
+    size_t colon = uri.find(":");
     if (colon == std::string::npos) {
         m_domain = "";
         return;
     }
 
     size_t begin = colon + 1;
-    while (begin < m_uri.size() && m_uri.at(begin) == '/') {
+    while (begin < uri.size() && uri.at(begin) == '/') {
         begin++;
     }
 
-    if (begin >= m_uri.size()) {
+    if (begin >= uri.size()) {
         m_domain = "";
         return;
     }
 
     size_t end = begin + 1;
-    while (end < m_uri.size() && m_uri.at(end) != '/') {
+    while (end < uri.size() && uri.at(end) != '/') {
         end++;
     }
 
@@ -346,16 +371,16 @@ abpvm::abpvm() : m_need_gpu_init(true), m_grid_dim(32), m_block_dim(256)
 abpvm::~abpvm()
 {
     for (auto &p: m_codes) {
-        cudaFree(p.d_code);
-        delete p.code;
+        gpuErrchk(cudaFree(p.d_code));
+        gpuErrchk(cudaFreeHost(p.code));
     }
 
     if (m_d_codes != nullptr) {
-        cudaFree(m_d_codes);
+        gpuErrchk(cudaFree(m_d_codes));
     }
 
-    cudaFree(m_d_query);
-    cudaFree(m_d_query_lower);
+    gpuErrchk(cudaFree(m_d_query));
+    gpuErrchk(cudaFree(m_d_query_lower));
 }
 
 void
@@ -442,19 +467,19 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
     init_gpu();
 
     for (int i = 0; i < size; i++) {
-        const std::string &uri(query[i].get_uri());
-        const std::string &uri_lower(query[i].get_uri_lower());
+        int len = query[i].get_len();
+        const char *uri = query[i].get_uri();
+        const char *uri_lower = query[i].get_uri_lower();
 
-        int scheme_len = skip_scheme(uri_lower.c_str());
+        int scheme_len = skip_scheme(uri_lower);
 
-        if (uri.size() < MAX_QUERY_LEN) {
-            gpuErrchk(cudaMemcpy(m_d_query, uri.c_str(), uri.size() + 1,
-                                 cudaMemcpyHostToDevice));
-            gpuErrchk(cudaMemcpy(m_d_query_lower, uri_lower.c_str(), uri_lower.size() + 1,
+        if (len < MAX_QUERY_LEN) {
+            gpuErrchk(cudaMemcpy(m_d_query, uri, len, cudaMemcpyHostToDevice));
+            gpuErrchk(cudaMemcpy(m_d_query_lower, uri_lower, len,
                                  cudaMemcpyHostToDevice));
 
             gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes, m_codes.size(),
-                                                   uri.size(), scheme_len,
+                                                   len, scheme_len,
                                                    m_d_query, m_d_query_lower);
 
             //cudaThreadSynchronize();
@@ -852,7 +877,9 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
     head.num_inst++;
 
     if (head.num_inst > 0) {
-        char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
+        char *code;
+        gpuErrchk(cudaMallocHost((void**)&code,
+                  sizeof(head) + sizeof(inst[0]) * head.num_inst));
 
         memcpy(code, &head, sizeof(head));
         memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);

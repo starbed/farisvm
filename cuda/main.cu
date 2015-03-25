@@ -103,8 +103,8 @@ main(int argc, char *argv[])
 
     const auto startTime = std::chrono::system_clock::now();
 
+    abpvm_query q;
     for (std::string &i: urls) {
-        abpvm_query q;
         q.set_uri(i);
         std::vector<std::string> result;
         vm.match(result, &q, 1);
