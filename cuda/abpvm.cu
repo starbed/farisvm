@@ -382,7 +382,6 @@ abpvm_query::set_uri(const std::string &uri)
 
 abpvm::abpvm() : m_d_codes_buf(nullptr),
                  m_d_codes_idx(nullptr),
-                 m_d_codes(nullptr),
                  m_need_gpu_init(true),
                  m_grid_dim(32),
                  m_block_dim(256),
