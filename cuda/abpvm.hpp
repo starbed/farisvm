@@ -90,24 +90,28 @@ private:
         std::string original_rule;
         std::string rule;
         uint32_t    flags;
+        int         code_len;
+        int         code_len_align;
         char       *code;
         char       *d_code;
     };
 
     std::vector<std::shared_ptr<abpvm_code>> m_codes;
 
-    char **m_d_codes;
+    char  *m_d_codes_buf;
+    int   *m_d_codes_idx;
     char  *m_d_query;
     char  *m_d_query_lower;
     bool   m_need_gpu_init;
     int    m_grid_dim;
     int    m_block_dim;
+    int    m_code_bytes;
 
     void get_gpu_prop();
     void init_gpu();
     int  skip_scheme(const char *sp);
     bool vmrun(const char *pc, const char *sp);
-    char *get_code(const std::string &rule, uint32_t flags);
+    char *get_code(const std::string &rule, uint32_t flags, int &len);
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);
 };
