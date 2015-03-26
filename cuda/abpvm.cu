@@ -229,7 +229,7 @@ gpu_vmrun(char *pc, char *sp, int num_inst)
 
 __global__
 void
-gpu_match(char *codes, int *codes_idx, int num_codes, int urllen, int scheme_len,
+gpu_match(char *codes, int *codes_idx, int num_codes, int scheme_len,
           char *query, char *query_lower)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -258,7 +258,7 @@ gpu_match(char *codes, int *codes_idx, int num_codes, int urllen, int scheme_len
             }
         }
 
-        for (int i = 0; i < urllen; i++) {
+        while (*sp != '\0') {
             ret = gpu_vmrun(pc, sp, head->num_inst);
 
             if (check_head || ret) {
@@ -538,7 +538,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
         int scheme_len = skip_scheme(uri_lower);
 
         if (len < MAX_QUERY_LEN) {
-            //cudaThreadSynchronize();
+            // cudaThreadSynchronize();
 
             gpuErrchk(cudaMemcpy(m_d_query, uri, len, cudaMemcpyHostToDevice));
             gpuErrchk(cudaMemcpy(m_d_query_lower, uri_lower, len,
@@ -547,7 +547,6 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
             gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes_buf,
                                                    m_d_codes_idx,
                                                    m_codes.size(),
-                                                   len,
                                                    scheme_len,
                                                    m_d_query,
                                                    m_d_query_lower);
