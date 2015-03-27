@@ -102,6 +102,7 @@ private:
     int   *m_d_codes_idx;
     char  *m_d_query;
     char  *m_d_query_lower;
+    int   *m_d_scheme_len;
     bool   m_need_gpu_init;
     int    m_grid_dim;
     int    m_block_dim;

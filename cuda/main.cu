@@ -6,6 +6,8 @@
 
 // #define CUIMODE
 
+#define QNUM 1000
+
 int
 main(int argc, char *argv[])
 {
@@ -103,11 +105,14 @@ main(int argc, char *argv[])
 
     const auto startTime = std::chrono::system_clock::now();
 
-    abpvm_query q;
-    for (std::string &i: urls) {
-        q.set_uri(i);
+    for (int i = 0; i < urls.size(); i += QNUM) {
+        abpvm_query q[QNUM];
+        int j = 0;
+        for (j = 0; i + j < urls.size() && j < QNUM; j++) {
+            q[j].set_uri(urls[i + j]);
+        }
         std::vector<std::string> result;
-        vm.match(result, &q, 1);
+        vm.match(result, q, j);
     }
 
     const auto endTime = std::chrono::system_clock::now();
