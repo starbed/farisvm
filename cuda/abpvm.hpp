@@ -93,7 +93,6 @@ private:
         int         code_len;
         int         code_len_align;
         char       *code;
-        char       *d_code;
     };
 
     std::vector<std::shared_ptr<abpvm_code>> m_codes;
@@ -103,6 +102,8 @@ private:
     char  *m_d_query;
     char  *m_d_query_lower;
     int   *m_d_scheme_len;
+    int   *m_d_result;
+    int   *m_result_init;
     bool   m_need_gpu_init;
     int    m_grid_dim;
     int    m_block_dim;

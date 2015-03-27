@@ -35,6 +35,8 @@
 #define MAX_QUERY_LEN (1024 * 32)
 #define MAX_QUERY_NUM 100
 
+#define MAX_RESULT 64
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void
 gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -231,7 +233,7 @@ gpu_vmrun(char *pc, char *sp, int num_inst)
 __global__
 void
 gpu_match(char *codes, int *codes_idx, int num_codes, int *scheme_len,
-          char *query, char *query_lower, int query_num)
+          char *query, char *query_lower, int query_num, int *result)
 {
     for (int i = 0; i < query_num; i++) {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -269,7 +271,13 @@ gpu_match(char *codes, int *codes_idx, int num_codes, int *scheme_len,
             }
 
             if (ret) {
-                //gpu_print_asm(pc, head->num_inst);
+                for (int j = 0; j < MAX_RESULT; j++) {
+                    int n = MAX_RESULT * query_num + j;
+                    atomicCAS(&result[n], -1, idx);
+                    if (result[n] == idx) {
+                        break;
+                    }
+                }
             }
 
             idx += gridDim.x * blockDim.x;
@@ -397,6 +405,11 @@ abpvm::abpvm() : m_d_codes_buf(nullptr),
     gpuErrchk(cudaMalloc((void**)&m_d_query, MAX_QUERY_LEN * MAX_QUERY_NUM));
     gpuErrchk(cudaMalloc((void**)&m_d_query_lower, MAX_QUERY_LEN * MAX_QUERY_NUM));
     gpuErrchk(cudaMalloc((void**)&m_d_scheme_len, MAX_QUERY_NUM * sizeof(m_d_scheme_len[0])));
+    gpuErrchk(cudaMalloc((void**)&m_d_result, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0])));
+
+    gpuErrchk(cudaMallocHost((void**)&m_result_init, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0])));
+
+    memset(m_result_init, -1, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0]));
 
     get_gpu_prop();
 }
@@ -417,6 +430,10 @@ abpvm::~abpvm()
 
     gpuErrchk(cudaFree(m_d_query));
     gpuErrchk(cudaFree(m_d_query_lower));
+    gpuErrchk(cudaFree(m_d_scheme_len));
+    gpuErrchk(cudaFree(m_d_result));
+
+    gpuErrchk(cudaFreeHost(m_result_init));
 }
 
 void
@@ -457,15 +474,7 @@ abpvm::init_gpu()
                          lc = lhs->code + sizeof(lhead);
 
                          int len = (lhead->num_inst < rhead->num_inst) ? lhead->num_inst : rhead->num_inst;
-                         int ret = memcmp(lc, rc, len);
-
-                         if (ret < 0) {
-                             return 1;
-                         } else if (ret > 0) {
-                             return -1;
-                         }
-
-                         return 0;
+                         return memcmp(lc, rc, len);
                      });
 
         int num_codes = m_codes.size();
@@ -532,11 +541,6 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
     // TODO: check input
     init_gpu();
 
-/*
-    int  *scheme_len = new int[MAX_QUERY_NUM];
-    char *q_uri = new char[MAX_QUERY_LEN * MAX_QUERY_NUM];
-    char *q_uri_lower = new char[MAX_QUERY_LEN * MAX_QUERY_NUM];
-*/
     int  *scheme_len;
     char *q_uri, *q_uri_lower;
 
@@ -574,6 +578,9 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                              cudaMemcpyHostToDevice));
         gpuErrchk(cudaMemcpy(m_d_scheme_len, scheme_len, query_num * sizeof(scheme_len[0]),
                              cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemcpy(m_d_result, m_result_init,
+                             MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0]),
+                             cudaMemcpyHostToDevice));
 
         gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes_buf,
                                                m_d_codes_idx,
@@ -581,15 +588,12 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                                                m_d_scheme_len,
                                                m_d_query,
                                                m_d_query_lower,
-                                               query_num);
+                                               query_num,
+                                               m_d_result);
 
         //cudaThreadSynchronize();
     }
-/*
-    delete[] q_uri;
-    delete[] q_uri_lower;
-    delete[] scheme_len;
-*/
+
     cudaFree(scheme_len);
     cudaFree(q_uri);
     cudaFree(q_uri_lower);
