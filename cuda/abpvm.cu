@@ -407,10 +407,6 @@ abpvm::abpvm() : m_d_codes_buf(nullptr),
     gpuErrchk(cudaMalloc((void**)&m_d_scheme_len, MAX_QUERY_NUM * sizeof(m_d_scheme_len[0])));
     gpuErrchk(cudaMalloc((void**)&m_d_result, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0])));
 
-    gpuErrchk(cudaMallocHost((void**)&m_result_init, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0])));
-
-    memset(m_result_init, -1, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0]));
-
     get_gpu_prop();
 }
 
@@ -432,8 +428,6 @@ abpvm::~abpvm()
     gpuErrchk(cudaFree(m_d_query_lower));
     gpuErrchk(cudaFree(m_d_scheme_len));
     gpuErrchk(cudaFree(m_d_result));
-
-    gpuErrchk(cudaFreeHost(m_result_init));
 }
 
 void
@@ -474,7 +468,15 @@ abpvm::init_gpu()
                          lc = lhs->code + sizeof(lhead);
 
                          int len = (lhead->num_inst < rhead->num_inst) ? lhead->num_inst : rhead->num_inst;
-                         return memcmp(lc, rc, len);
+                         int ret = memcmp(lc, rc, len);
+
+                         if (ret < 0) {
+                             return 1;
+                         } else if (ret > 0) {
+                             return -1;
+                         }
+
+                         return 0;
                      });
 
         int num_codes = m_codes.size();
@@ -578,9 +580,8 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                              cudaMemcpyHostToDevice));
         gpuErrchk(cudaMemcpy(m_d_scheme_len, scheme_len, query_num * sizeof(scheme_len[0]),
                              cudaMemcpyHostToDevice));
-        gpuErrchk(cudaMemcpy(m_d_result, m_result_init,
-                             MAX_QUERY_NUM * MAX_RESULT * sizeof(m_result_init[0]),
-                             cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMemset(m_d_result, -1,
+                             MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0])));
 
         gpu_match<<<m_grid_dim, m_block_dim>>>(m_d_codes_buf,
                                                m_d_codes_idx,
