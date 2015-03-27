@@ -32,10 +32,10 @@
 
 #define MAX_CODE_SIZE (SHM_SIZE / MAX_BLOCK_DIM)
 
-#define MAX_QUERY_LEN (1024 * 32)
+#define MAX_QUERY_LEN (1024 * 8)
 #define MAX_QUERY_NUM 100
 
-#define MAX_RESULT 64
+#define MAX_RESULT 16
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void
@@ -272,7 +272,7 @@ gpu_match(char *codes, int *codes_idx, int num_codes, int *scheme_len,
 
             if (ret) {
                 for (int j = 0; j < MAX_RESULT; j++) {
-                    int n = MAX_RESULT * query_num + j;
+                    int n = MAX_RESULT * i + j;
                     atomicCAS(&result[n], -1, idx);
                     if (result[n] == idx) {
                         break;
@@ -328,16 +328,12 @@ abpvm_query::abpvm_query()
 {
     m_uri = new char[MAX_QUERY_LEN];
     m_uri_lower = new char[MAX_QUERY_LEN];
-    //gpuErrchk(cudaMallocHost((void**)&m_uri, MAX_QUERY_LEN));
-    //gpuErrchk(cudaMallocHost((void**)&m_uri_lower, MAX_QUERY_LEN));
 }
 
 abpvm_query::~abpvm_query()
 {
     delete[] m_uri;
     delete[] m_uri_lower;
-    //gpuErrchk(cudaFreeHost(m_uri));
-    //gpuErrchk(cudaFreeHost(m_uri_lower));
 }
 
 void
@@ -537,6 +533,40 @@ abpvm::skip_scheme(const char *sp)
     return i;
 }
 
+bool
+abpvm::check_flag(std::shared_ptr<abpvm_code> code, const abpvm_query *query)
+{
+    if (code->flags & FLAG_DOMAIN) {
+        const std::string *qd;
+
+        if (code->flags & FLAG_MATCH_CASE) {
+            qd = &query->get_domain();
+        } else {
+            qd = &query->get_domain_lower();
+        }
+
+        std::string::const_iterator search_result;
+
+        for (auto &d: code->ex_domains) {
+            search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result == qd->end()) {
+                return false;
+            }
+        }
+
+        for (auto &d: code->domains) {
+            search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result != qd->end()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 void
 abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
@@ -545,10 +575,12 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
     int  *scheme_len;
     char *q_uri, *q_uri_lower;
+    int  *ret;
 
     gpuErrchk(cudaMallocHost((void**)&scheme_len, MAX_QUERY_NUM * sizeof(scheme_len[0])));
     gpuErrchk(cudaMallocHost((void**)&q_uri, MAX_QUERY_LEN * MAX_QUERY_NUM));
     gpuErrchk(cudaMallocHost((void**)&q_uri_lower, MAX_QUERY_LEN * MAX_QUERY_NUM));
+    gpuErrchk(cudaMallocHost((void**)&ret, MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0])));
 
     int n = 0;
 
@@ -593,11 +625,33 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                                                m_d_result);
 
         //cudaThreadSynchronize();
+        gpuErrchk(cudaMemcpy(ret, m_d_result,
+                  MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0]),
+                  cudaMemcpyDeviceToHost));
+        for (int j = 0; j < query_num; j++) {
+            bool f = false;
+            for (int k = 0; k < MAX_RESULT; k++) {
+                int r = ret[MAX_RESULT * j + k];
+                if (r == -1) {
+                    break;
+                } else {
+                    //std::cout << r << ", ";
+                    if (check_flag(m_codes[r], &query[i + j])) {
+                        if (! f)
+                            std::cout << query[i + j].get_uri() << std::endl;
+                        f = true;
+                        std::cout << "    " << m_codes[r]->original_rule << std::endl;
+                    }
+                }
+            }
+            if (f) std::cout << std::endl;
+        }
     }
 
-    cudaFree(scheme_len);
-    cudaFree(q_uri);
-    cudaFree(q_uri_lower);
+    gpuErrchk(cudaFreeHost(scheme_len));
+    gpuErrchk(cudaFreeHost(q_uri));
+    gpuErrchk(cudaFreeHost(q_uri_lower));
+    gpuErrchk(cudaFreeHost(ret));
 }
 
 bool

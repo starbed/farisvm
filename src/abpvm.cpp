@@ -140,6 +140,40 @@ abpvm::~abpvm()
     }
 }
 
+bool
+abpvm::check_flag(abpvm_code *code, const abpvm_query *query)
+{
+    if (code->flags & FLAG_DOMAIN) {
+        const std::string *qd;
+
+        if (code->flags & FLAG_MATCH_CASE) {
+            qd = &query->get_domain();
+        } else {
+            qd = &query->get_domain_lower();
+        }
+
+        std::string::const_iterator search_result;
+
+        for (auto &d: code->ex_domains) {
+            search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result == qd->end()) {
+                return false;
+            }
+        }
+
+        for (auto &d: code->domains) {
+            search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result != qd->end()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 void
 abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
 {
@@ -177,35 +211,9 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
             if (ret) {
                 // TODO: check options
                 // check domains
-                if (code.flags & FLAG_DOMAIN) {
-                    const std::string *qd;
-
-                    if (code.flags & FLAG_MATCH_CASE) {
-                        qd = &query[i].get_domain();
-                    } else {
-                        qd = &query[i].get_domain_lower();
-                    }
-
-                    std::string::const_iterator search_result;
-
-                    for (auto &d: code.ex_domains) {
-                        search_result = (*d.bmh)(qd->begin(), qd->end());
-                        if (search_result == qd->end()) {
-                            continue;
-                        }
-                    }
-
-                    for (auto &d: code.domains) {
-                        search_result = (*d.bmh)(qd->begin(), qd->end());
-                        if (search_result != qd->end()) {
-                            goto found;
-                        }
-                    }
-
-                    continue;
+                if (check_flag(&code, &query[i])) {
+                    result.push_back(code.original_rule);
                 }
-found:
-                result.push_back(code.original_rule);
             }
         }
     }

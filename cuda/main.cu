@@ -114,6 +114,7 @@ main(int argc, char *argv[])
         std::vector<std::string> result;
         vm.match(result, q, j);
     }
+    cudaThreadSynchronize();
 
     const auto endTime = std::chrono::system_clock::now();
     const auto timeSpan = endTime - startTime;

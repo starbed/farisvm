@@ -94,6 +94,7 @@ private:
     char *get_code(const std::string &rule, uint32_t flags);
     void split(const std::string &str, const std::string &delim,
                std::vector<std::string> &ret);
+    bool check_flag(abpvm_code *code, const abpvm_query *query);
 };
 
 struct abpvm_exception : public std::exception
