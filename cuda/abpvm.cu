@@ -33,7 +33,7 @@
 #define MAX_CODE_SIZE (SHM_SIZE / MAX_BLOCK_DIM)
 
 #define MAX_QUERY_LEN (1024 * 8)
-#define MAX_QUERY_NUM 100
+#define MAX_QUERY_NUM 32
 
 #define MAX_RESULT 16
 
@@ -460,19 +460,17 @@ abpvm::init_gpu()
                          rhead = (abpvm_head*)lhs->code;
                          lhead = (abpvm_head*)rhs->code;
 
-                         rc = lhs->code + sizeof(rhead);
-                         lc = lhs->code + sizeof(lhead);
+                         rc = rhs->code + sizeof(abpvm_head);
+                         lc = lhs->code + sizeof(abpvm_head);
 
                          int len = (lhead->num_inst < rhead->num_inst) ? lhead->num_inst : rhead->num_inst;
                          int ret = memcmp(lc, rc, len);
 
                          if (ret < 0) {
-                             return 1;
-                         } else if (ret > 0) {
-                             return -1;
+                             return true;
                          }
 
-                         return 0;
+                         return false;
                      });
 
         int num_codes = m_codes.size();
@@ -637,14 +635,14 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                 } else {
                     //std::cout << r << ", ";
                     if (check_flag(m_codes[r], &query[i + j])) {
-                        if (! f)
+/*                        if (! f)
                             std::cout << query[i + j].get_uri() << std::endl;
                         f = true;
-                        std::cout << "    " << m_codes[r]->original_rule << std::endl;
+                        std::cout << "    " << m_codes[r]->original_rule << std::endl; */
                     }
                 }
             }
-            if (f) std::cout << std::endl;
+//            if (f) std::cout << std::endl;
         }
     }
 
