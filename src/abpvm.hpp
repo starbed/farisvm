@@ -86,6 +86,7 @@ private:
         std::string rule;
         uint32_t    flags;
         char       *code;
+        std::shared_ptr<BMH> bmh;
     };
 
     std::vector<abpvm_code> m_codes;

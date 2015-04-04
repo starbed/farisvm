@@ -181,15 +181,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
 
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
-            char *pc = code.code + sizeof(abpvm_head);
-            bool check_head = false;
             bool ret = false;
-
-            if (*pc == CHAR_HEAD) {
-                check_head = true;
-                pc++;
-            }
-
             const std::string *uri;
 
             if (code.flags & FLAG_MATCH_CASE) {
@@ -198,13 +190,29 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                 uri = &query[i].get_uri_lower();
             }
 
-            for (int j = 0; j < uri->size(); j++) {
-                const char *sp = uri->c_str() + j;
 
-                ret = vmrun(pc, sp);
+            if (code.bmh) {
+                auto pos = (*code.bmh)(uri->begin(), uri->end());
+                if (pos != uri->end()) {
+                    ret = true;
+                }
+            } else {
+                char *pc = code.code + sizeof(abpvm_head);
+                bool check_head = false;
 
-                if (check_head || ret) {
-                    break;
+                if (*pc == CHAR_HEAD) {
+                    check_head = true;
+                    pc++;
+                }
+
+                for (int j = 0; j < uri->size(); j++) {
+                    const char *sp = uri->c_str() + j;
+
+                    ret = vmrun(pc, sp);
+
+                    if (check_head || ret) {
+                        break;
+                    }
                 }
             }
 
@@ -471,6 +479,9 @@ abpvm::add_rule(const std::string &rule)
         }
     }
 
+    if (url_rule.size() == 0)
+        return;
+
     // preprocess rule
     std::string result;
 
@@ -494,14 +505,18 @@ abpvm::add_rule(const std::string &rule)
 
     code.original_rule = rule;
 
-    if (code.code != nullptr)
-        m_codes.push_back(code);
+    if (code.code == nullptr) {
+        code.bmh = std::shared_ptr<BMH>(new BMH(url_rule.begin(), url_rule.end()));
+    }
+
+    m_codes.push_back(code);
 }
 
 char *
 abpvm::get_code(const std::string &rule, uint32_t flags)
 {
     abpvm_head head;
+    int num_char  = 0;
     char inst[INST_MAX];
     const char *sp = rule.c_str();
 
@@ -578,6 +593,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
         } else {
             if (urlchar[(unsigned char)sp[0]]) {
                 inst[head.num_inst] = OP_CHAR;
+                num_char++;
 
                 if (flags & FLAG_MATCH_CASE) {
                     inst[head.num_inst] = sp[0];
@@ -602,14 +618,25 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
     inst[head.num_inst] = OP_MATCH;
     head.num_inst++;
 
-    if (head.num_inst > 0) {
-        char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
+    if (head.num_inst > 1) {
+        if (num_char + 1 == head.num_inst) {
+            // should use boyer-moore-horspool
+            return nullptr;
+        } else {
+            char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
 
-        memcpy(code, &head, sizeof(head));
-        memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
+            memcpy(code, &head, sizeof(head));
+            memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
 
-        return code;
+            return code;
+        }
     } else {
-        return nullptr;
+        // no instructions
+        std::ostringstream oss;
+        oss << rule << ": no instructions";
+        throw(abpvm_exception(oss.str()));
     }
+
+    // never reach here
+    return nullptr;
 }
