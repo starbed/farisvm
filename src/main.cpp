@@ -59,7 +59,7 @@ main(int argc, char *argv[])
 
         while (getline(ifs, line)) {
             try {
-                vm.add_rule(line);
+                vm.add_rule(line, argv[i]);
             } catch (abpvm_exception e) {
                 std::cerr << e.what() << std::endl;
             }
@@ -81,7 +81,7 @@ main(int argc, char *argv[])
 
         const auto startTime = std::chrono::system_clock::now();
 
-        vm.match(result, &q, 1);
+        vm.match(&result, &q, 1);
 
         const auto endTime = std::chrono::system_clock::now();
         const auto timeSpan = endTime - startTime;
@@ -100,7 +100,15 @@ main(int argc, char *argv[])
         abpvm_query q;
         q.set_uri(i);
         std::vector<std::string> result;
-        vm.match(result, &q, 1);
+        vm.match(&result, &q, 1);
+/*
+        if (result.size() > 0) {
+            std::cout << i << std::endl;
+            for (auto r: result) {
+                std::cout << r << std::endl;
+            }
+            std::cout << std::endl;
+        }*/
     }
 
     const auto endTime = std::chrono::system_clock::now();

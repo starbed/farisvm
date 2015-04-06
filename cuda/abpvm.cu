@@ -566,7 +566,7 @@ abpvm::check_flag(std::shared_ptr<abpvm_code> code, const abpvm_query *query)
 }
 
 void
-abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
+abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
     init_gpu();
@@ -622,27 +622,21 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                                                query_num,
                                                m_d_result);
 
-        //cudaThreadSynchronize();
         gpuErrchk(cudaMemcpy(ret, m_d_result,
                   MAX_QUERY_NUM * MAX_RESULT * sizeof(m_d_result[0]),
                   cudaMemcpyDeviceToHost));
+
         for (int j = 0; j < query_num; j++) {
-            bool f = false;
             for (int k = 0; k < MAX_RESULT; k++) {
                 int r = ret[MAX_RESULT * j + k];
                 if (r == -1) {
                     break;
                 } else {
-                    //std::cout << r << ", ";
                     if (check_flag(m_codes[r], &query[i + j])) {
-/*                        if (! f)
-                            std::cout << query[i + j].get_uri() << std::endl;
-                        f = true;
-                        std::cout << "    " << m_codes[r]->original_rule << std::endl; */
+                        result[i + j].push_back(m_codes[r]->original_rule);
                     }
                 }
             }
-//            if (f) std::cout << std::endl;
         }
     }
 
@@ -787,7 +781,7 @@ abpvm::split(const std::string &str, const std::string &delim,
 }
 
 void
-abpvm::add_rule(const std::string &rule)
+abpvm::add_rule(const std::string &rule, const std::string &file)
 {
     std::vector<std::string> sp;
     std::string url_rule;
@@ -923,6 +917,7 @@ abpvm::add_rule(const std::string &rule)
 
     int code_len;
     code->flags = flags;
+    code->file  = file;
     code->rule  = url_rule;
     code->code  = get_code(url_rule, flags, code_len);
     code->code_len  = code_len;

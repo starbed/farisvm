@@ -54,15 +54,16 @@ private:
 class abpvm {
 public:
     struct abpvm_match_result {
+        std::string file;
         std::string rule;
     };
 
     abpvm();
     virtual ~abpvm();
 
-    void add_rule(const std::string &rule);
+    void add_rule(const std::string &rule, const std::string &file);
     void print_asm();
-    void match(std::vector<std::string> &result, const abpvm_query *query, int size);
+    void match(std::vector<std::string> *result, const abpvm_query *query, int size);
 
 private:
     typedef boost::algorithm::boyer_moore_horspool<std::string::iterator> BMH;
@@ -82,6 +83,7 @@ private:
     struct abpvm_code {
         std::vector<abpvm_domain> domains;
         std::vector<abpvm_domain> ex_domains;
+        std::string file;
         std::string original_rule;
         std::string rule;
         uint32_t    flags;

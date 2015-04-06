@@ -61,7 +61,7 @@ main(int argc, char *argv[])
 
         while (getline(ifs, line)) {
             try {
-                vm.add_rule(line);
+                vm.add_rule(line, argv[i]);
             } catch (abpvm_exception e) {
                 std::cerr << e.what() << std::endl;
             }
@@ -83,7 +83,7 @@ main(int argc, char *argv[])
 
         const auto startTime = std::chrono::system_clock::now();
 
-        vm.match(result, &q, 1);
+        vm.match(&result, &q, 1);
 
         const auto endTime = std::chrono::system_clock::now();
         const auto timeSpan = endTime - startTime;
@@ -99,7 +99,7 @@ main(int argc, char *argv[])
     abpvm_query q0;
     q0.set_uri(urls[0]);
     std::vector<std::string> r0;
-    vm.match(r0, &q0, 1);
+    vm.match(&r0, &q0, 1);
 
     std::cout << "initialized\n" << std::endl;
 
@@ -111,7 +111,7 @@ main(int argc, char *argv[])
         for (j = 0; i + j < urls.size() && j < QNUM; j++) {
             q[j].set_uri(urls[i + j]);
         }
-        std::vector<std::string> result;
+        std::vector<std::string> result[QNUM];
         vm.match(result, q, j);
     }
     cudaThreadSynchronize();

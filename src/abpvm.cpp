@@ -175,7 +175,7 @@ abpvm::check_flag(abpvm_code *code, const abpvm_query *query)
 }
 
 void
-abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int size)
+abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
 
@@ -220,7 +220,7 @@ abpvm::match(std::vector<std::string> &result, const abpvm_query *query, int siz
                 // TODO: check options
                 // check domains
                 if (check_flag(&code, &query[i])) {
-                    result.push_back(code.original_rule);
+                    result[i].push_back(code.original_rule);
                 }
             }
         }
@@ -362,7 +362,7 @@ abpvm::split(const std::string &str, const std::string &delim,
 }
 
 void
-abpvm::add_rule(const std::string &rule)
+abpvm::add_rule(const std::string &rule, const std::string &file)
 {
     std::vector<std::string> sp;
     std::string url_rule;
@@ -500,6 +500,7 @@ abpvm::add_rule(const std::string &rule)
     url_rule = std::regex_replace(url_rule, re_sepbar, "^");
 
     code.flags = flags;
+    code.file  = file;
     code.rule  = url_rule;
     code.code  = get_code(url_rule, flags);
 
