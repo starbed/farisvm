@@ -99,16 +99,16 @@ main(int argc, char *argv[])
     for (std::string &i: urls) {
         abpvm_query q;
         q.set_uri(i);
-        std::vector<std::string> result;
+        std::vector<abpvm::match_result> result;
         vm.match(&result, &q, 1);
-/*
+
         if (result.size() > 0) {
             std::cout << i << std::endl;
             for (auto r: result) {
-                std::cout << r << std::endl;
+                std::cout << r.file << ": " << r.rule << std::endl;
             }
             std::cout << std::endl;
-        }*/
+        }
     }
 
     const auto endTime = std::chrono::system_clock::now();

@@ -175,7 +175,7 @@ abpvm::check_flag(abpvm_code *code, const abpvm_query *query)
 }
 
 void
-abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int size)
+abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
 
@@ -217,10 +217,8 @@ abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int siz
             }
 
             if (ret) {
-                // TODO: check options
-                // check domains
                 if (check_flag(&code, &query[i])) {
-                    result[i].push_back(code.original_rule);
+                    result[i].push_back(match_result(code.file, code.original_rule));
                 }
             }
         }

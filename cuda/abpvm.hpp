@@ -58,9 +58,11 @@ private:
 
 class abpvm {
 public:
-    struct abpvm_match_result {
+    struct match_result {
         std::string file;
         std::string rule;
+
+        match_result(const std::string &f, const std::string r) : file(f), rule(r) {}
     };
 
     struct abpvm_head {
@@ -73,7 +75,7 @@ public:
 
     void add_rule(const std::string &rule, const std::string &file);
     void print_asm();
-    void match(std::vector<std::string> *result, const abpvm_query *query, int size);
+    void match(std::vector<match_result> *result, const abpvm_query *query, int size);
 
 private:
     typedef boost::algorithm::boyer_moore_horspool<std::string::iterator> BMH;

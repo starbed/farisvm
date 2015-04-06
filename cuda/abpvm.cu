@@ -566,7 +566,7 @@ abpvm::check_flag(std::shared_ptr<abpvm_code> code, const abpvm_query *query)
 }
 
 void
-abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int size)
+abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
     init_gpu();
@@ -633,7 +633,8 @@ abpvm::match(std::vector<std::string> *result, const abpvm_query *query, int siz
                     break;
                 } else {
                     if (check_flag(m_codes[r], &query[i + j])) {
-                        result[i + j].push_back(m_codes[r]->original_rule);
+                        result[i + j].push_back(match_result(m_codes[r]->file,
+                                                             m_codes[r]->original_rule));
                     }
                 }
             }
