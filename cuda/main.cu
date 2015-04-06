@@ -98,7 +98,7 @@ main(int argc, char *argv[])
 #else
     abpvm_query q0;
     q0.set_uri(urls[0]);
-    std::vector<std::string> r0;
+    std::vector<abpvm::match_result> r0;
     vm.match(&r0, &q0, 1);
 
     std::cout << "initialized\n" << std::endl;
@@ -111,7 +111,7 @@ main(int argc, char *argv[])
         for (j = 0; i + j < urls.size() && j < QNUM; j++) {
             q[j].set_uri(urls[i + j]);
         }
-        std::vector<std::string> result[QNUM];
+        std::vector<abpvm::match_result> result[QNUM];
         vm.match(result, q, j);
     }
     cudaThreadSynchronize();
