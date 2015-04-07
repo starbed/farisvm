@@ -1,6 +1,8 @@
 #ifndef ABPVM_C
 #define ABPVM_C
 
+#include "spin_rwlock.hpp"
+
 #include <string>
 #include <vector>
 #include <exception>
@@ -92,6 +94,8 @@ private:
         char       *code;
         std::shared_ptr<BMH> bmh;
     };
+
+    spin_rwlock m_lock;
 
     std::vector<abpvm_code> m_codes;
 

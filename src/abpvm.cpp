@@ -135,6 +135,8 @@ abpvm::abpvm()
 
 abpvm::~abpvm()
 {
+    spin_lock_write lock(m_lock);
+
     for (auto &p: m_codes) {
         delete p.code;
     }
@@ -178,6 +180,8 @@ void
 abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
+
+    spin_lock_read lock(m_lock);
 
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
@@ -366,6 +370,8 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     std::string url_rule;
     abpvm_code code;
     uint32_t flags = 0;
+
+    spin_lock_write lock(m_lock);
 
     // do not add empty rules
     // do not add any comments
