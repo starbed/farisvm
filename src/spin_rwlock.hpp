@@ -20,9 +20,9 @@ private:
 class spin_lock_read {
 public:
     spin_lock_read(spin_rwlock &lock) : m_lock(lock) {
-        int i = 0;
+        int wc = lock.m_write_count;
         while (lock.m_write_count > 0) {
-            if (i++ > 100) // to avoid starvation
+            if (wc > lock.m_write_count) // to avoid starvation
                 break;
         }
 
