@@ -21,8 +21,9 @@ class spin_lock_read {
 public:
     spin_lock_read(spin_rwlock &lock) : m_lock(lock) {
         int wc = lock.m_write_count;
+        int i = 0;
         while (lock.m_write_count > 0) {
-            if (wc > lock.m_write_count) // to avoid starvation
+            if (wc > lock.m_write_count || i++ > 1000000) // to avoid starvation
                 break;
         }
 
@@ -54,15 +55,18 @@ private:
 class spin_lock_write {
 public:
     spin_lock_write(spin_rwlock &lock) : m_lock(lock) {
+        __sync_fetch_and_add(&m_lock.m_write_count, 1);
         for (;;) {
-            __sync_fetch_and_add(&m_lock.m_write_count, 1);
+            if (lock.m_read_count > 0)
+                continue;
+
             while (__sync_lock_test_and_set(&lock.m_is_writing, 1)) {
                 while (lock.m_is_writing) ;
                 // busy-wait
             }
 
             if (lock.m_read_count > 0) {
-                unlock();
+                __sync_lock_release(&m_lock.m_is_writing);
             } else {
                 break;
             }
