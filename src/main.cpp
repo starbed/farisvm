@@ -3,8 +3,22 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <thread>
 
 // #define CUIMODE
+
+#define NUM_THREAD 8
+
+void
+match(int id, int th_num, std::vector<std::string> &urls, abpvm &vm)
+{
+    for (int i = id; i < urls.size(); i += th_num) {
+        abpvm_query q;
+        q.set_uri(urls[i]);
+        std::vector<abpvm::match_result> result;
+        vm.match(&result, &q, 1);
+    }
+}
 
 int
 main(int argc, char *argv[])
@@ -95,7 +109,7 @@ main(int argc, char *argv[])
     }
 #else
     const auto startTime = std::chrono::system_clock::now();
-
+/*
     for (std::string &i: urls) {
         abpvm_query q;
         q.set_uri(i);
@@ -109,6 +123,18 @@ main(int argc, char *argv[])
             }
             std::cout << std::endl;
         }
+    }
+*/
+    std::thread *th[NUM_THREAD];
+
+    int i;
+    for (i = 0; i < NUM_THREAD; i++) {
+        th[i] = new std::thread(match, i, NUM_THREAD, std::ref(urls), std::ref(vm));
+    }
+
+    for (i = 0; i < NUM_THREAD; i++) {
+        th[i]->join();
+        //delete th[i];
     }
 
     const auto endTime = std::chrono::system_clock::now();
