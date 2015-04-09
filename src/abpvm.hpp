@@ -58,8 +58,9 @@ public:
     struct match_result {
         std::string file;
         std::string rule;
+        uint32_t    flags;
 
-        match_result(const std::string &f, const std::string r) : file(f), rule(r) {}
+        match_result(const std::string &f, const std::string r, uint32_t flg) : file(f), rule(r), flags(flg) {}
     };
 
     abpvm();
