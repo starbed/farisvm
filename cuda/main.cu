@@ -79,7 +79,7 @@ main(int argc, char *argv[])
         std::string input;
         std::cin >> input;
 
-        q.set_uri(input);
+        q.set_uri(input, "");
 
         const auto startTime = std::chrono::system_clock::now();
 
@@ -97,7 +97,7 @@ main(int argc, char *argv[])
     }
 #else
     abpvm_query q0;
-    q0.set_uri(urls[0]);
+    q0.set_uri(urls[0], "");
     std::vector<abpvm::match_result> r0;
     vm.match(&r0, &q0, 1);
 
@@ -109,7 +109,7 @@ main(int argc, char *argv[])
         abpvm_query q[QNUM];
         int j = 0;
         for (j = 0; i + j < urls.size() && j < QNUM; j++) {
-            q[j].set_uri(urls[i + j]);
+            q[j].set_uri(urls[i + j], "");
         }
         std::vector<abpvm::match_result> result[QNUM];
         vm.match(result, q, j);
