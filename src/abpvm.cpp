@@ -93,7 +93,7 @@ abpvm_exception::what() const throw()
 }
 
 void
-abpvm_query::set_uri(const std::string &uri)
+abpvm_query::set_uri(const std::string &uri, const std::string &ref)
 {
     m_uri = uri;
     m_uri_lower = uri;
@@ -126,6 +126,38 @@ abpvm_query::set_uri(const std::string &uri)
     m_domain_lower = m_domain;
     std::transform(m_domain_lower.begin(), m_domain_lower.end(),
                    m_domain_lower.begin(), ::tolower);
+
+    // check third-party or not
+    colon = ref.find(":");
+    if (colon == std::string::npos) {
+        m_is_third = false;
+        return;
+    }
+
+    begin = colon + 1;
+    while (begin < ref.size() && ref.at(begin) == '/') {
+        begin++;
+    }
+
+    if (begin >= ref.size()) {
+        m_is_third = false;
+        return;
+    }
+
+    end = begin + 1;
+    while (end < ref.size() && ref.at(end) != '/') {
+        end++;
+    }
+
+    std::string ref_domain(ref.substr(begin, end - begin));
+    std::transform(ref_domain.begin(), ref_domain.end(),
+                   ref_domain.begin(), ::tolower);
+
+    if (m_domain_lower == ref_domain) {
+        m_is_third = false;
+    } else {
+        m_is_third = true;
+    }
 }
 
 abpvm::abpvm()
@@ -170,6 +202,14 @@ abpvm::check_flag(abpvm_code *code, const abpvm_query *query)
             }
         }
 
+        return false;
+    }
+
+    if (code->flags & FLAG_THIRD_PARTY && ! query->is_third()) {
+        return false;
+    }
+
+    if (code->flags & FLAG_NOT_THIRD_PARTY && query->is_third()) {
         return false;
     }
 
@@ -350,8 +390,8 @@ abpvm::print_asm()
 }
 
 void
-abpvm::split(const std::string &str, const std::string &delim,
-             std::vector<std::string> &ret)
+split(const std::string &str, const std::string &delim,
+      std::vector<std::string> &ret)
 {
     size_t current = 0, found, delimlen = delim.size();
 

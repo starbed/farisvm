@@ -7,16 +7,49 @@
 
 // #define CUIMODE
 
-#define NUM_THREAD 8
+#define NUM_THREAD 20
+
+std::mutex mtx;
+
+std::string
+replace(const std::string &str, const std::string &from, const std::string &to)
+{
+    std::string ret = str;
+    std::string::size_type pos = ret.find(from);
+    while(pos != std::string::npos){
+        ret.replace(pos, from.size(), to);
+        pos = ret.find(from, pos + to.size());
+    }
+
+    return ret;
+}
 
 void
-match(int id, int th_num, std::vector<std::string> &urls, abpvm &vm)
+match(int id, int th_num,
+      std::vector<std::string> &urls, std::vector<std::string> &refs, abpvm &vm)
 {
     for (int i = id; i < urls.size(); i += th_num) {
         abpvm_query q;
-        q.set_uri(urls[i]);
+        q.set_uri(urls[i], refs[i]);
         std::vector<abpvm::match_result> result;
         vm.match(&result, &q, 1);
+        if (result.size() > 0) {
+            std::lock_guard<std::mutex> lock(mtx);
+            std::string url = replace(urls[i], "\\", "\\\\");
+            url = replace(url, "\\\\\"", "\\\"");
+            std::cout << "{\"url\":\"" << replace(urls[i], "\"", "\\\"")
+                      << "\",\"result\":[{\"file\":\"" << result[0].file
+                      << "\",\"rule\":\"" << result[0].rule << "\"}";
+            int j = 0;
+            for (auto &ret: result) {
+                if (j++ > 0) {
+                    std::cout << ",{\"file\":\"" << ret.file
+                              << "\",\"rule\":\"" << ret.rule << "\"}";
+                }
+            }
+            std::cout << "]}" << std::endl;
+        }
+        result.clear();
     }
 }
 
@@ -24,6 +57,7 @@ int
 main(int argc, char *argv[])
 {
     std::vector<std::string> urls;
+    std::vector<std::string> refs;
     abpvm vm;
 
     // vm.add_rule("|https:");
@@ -47,18 +81,33 @@ main(int argc, char *argv[])
     }
 
     std::ifstream ifurls(argv[1]);
-    std::string url;
+    std::string line;
 
     if (ifurls.fail()) {
         std::cerr << "cannot read " << argv[1] << std::endl;
         return -1;
     }
 
-    while (getline(ifurls, url)) {
-        urls.push_back(url);
+    int n = 0;
+    std::string sp(" ");
+    while (getline(ifurls, line)) {
+        std::vector<std::string> ret;
+        //std::cout << n++ << std::endl;
+
+        split(line, sp, ret);
+        urls.push_back(ret[0]);
+        //std::cout << ret[0] << std::endl;
+
+        if (ret.size() >= 2) {
+            //std::cout << ret[1] << std::endl;
+            refs.push_back(ret[1]);
+        } else {
+            refs.push_back("");
+        }
+        ret.clear();
     }
 
-    std::cout << "loaded " << urls.size() << " urls" << std::endl;
+    //std::cout << "loaded " << urls.size() << " urls" << std::endl;
 #endif
 
     for (int i = init_i; i < argc; i++) {
@@ -82,7 +131,7 @@ main(int argc, char *argv[])
 
     // vm.print_asm();
 
-    std::cout << "loaded filters\n" << std::endl;
+    //std::cout << "loaded filters\n" << std::endl;
 
 #ifdef CUIMODE
     for (;;) {
@@ -129,7 +178,8 @@ main(int argc, char *argv[])
 
     int i;
     for (i = 0; i < NUM_THREAD; i++) {
-        th[i] = new std::thread(match, i, NUM_THREAD, std::ref(urls), std::ref(vm));
+        th[i] = new std::thread(match, i, NUM_THREAD, std::ref(urls),
+                                std::ref(refs), std::ref(vm));
     }
 
     for (i = 0; i < NUM_THREAD; i++) {
@@ -140,10 +190,10 @@ main(int argc, char *argv[])
     const auto endTime = std::chrono::system_clock::now();
     const auto timeSpan = endTime - startTime;
 
-    std::cout << "#urls: " << urls.size()
-              << "\ntime: " <<
-        std::chrono::duration_cast<std::chrono::microseconds>(timeSpan).count() / (double)1000000.0
-        << " [s]\n" << std::endl;
+    // std::cout << "#urls: " << urls.size()
+    //           << "\ntime: " <<
+    //     std::chrono::duration_cast<std::chrono::microseconds>(timeSpan).count() / (double)1000000.0
+    //     << " [s]\n" << std::endl;
 #endif // CUIMODE
 
 

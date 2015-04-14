@@ -40,17 +40,19 @@
 
 class abpvm_query {
 public:
-    void set_uri(const std::string &uri);
+    void set_uri(const std::string &uri, const std::string &ref);
     const std::string &get_uri() const { return m_uri; }
     const std::string &get_uri_lower() const { return m_uri_lower; }
     const std::string &get_domain() const { return m_domain; }
     const std::string &get_domain_lower() const { return m_domain_lower; }
+    bool is_third() const { return m_is_third; }
 
 private:
     std::string m_uri;
     std::string m_uri_lower;
     std::string m_domain;
     std::string m_domain_lower;
+    bool m_is_third;
 };
 
 class abpvm {
@@ -101,8 +103,6 @@ private:
 
     bool vmrun(const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
-    void split(const std::string &str, const std::string &delim,
-               std::vector<std::string> &ret);
     bool check_flag(abpvm_code *code, const abpvm_query *query);
 };
 
@@ -115,5 +115,8 @@ struct abpvm_exception : public std::exception
 
     std::string m_msg;
 };
+
+void split(const std::string &str, const std::string &delim,
+           std::vector<std::string> &ret);
 
 #endif // ABPVM
