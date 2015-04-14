@@ -262,7 +262,7 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
 
             if (ret) {
                 if (check_flag(&code, &query[i])) {
-                    result[i].push_back(match_result(code.file, code.original_rule));
+                    result[i].push_back(match_result(code.file, code.original_rule, code.flags));
                 }
             }
         }
@@ -411,8 +411,6 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     abpvm_code code;
     uint32_t flags = 0;
 
-    spin_lock_write lock(m_lock);
-
     // do not add empty rules
     // do not add any comments
     if (rule.size() == 0 || rule.at(0) == '!') {
@@ -554,6 +552,7 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
         code.bmh = std::shared_ptr<BMH>(new BMH(url_rule.begin(), url_rule.end()));
     }
 
+    spin_lock_write lock(m_lock);
     m_codes.push_back(code);
 }
 
