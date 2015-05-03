@@ -224,7 +224,7 @@ abpvm::match_table(std::vector<match_result> *result,
     int readnum;
     char h[2];
     
-    const char *pc, *sp;
+    const char *pc, *sp, *end;
 
     h[1] = OP_MATCH;
 
@@ -232,6 +232,7 @@ abpvm::match_table(std::vector<match_result> *result,
         std::set<ptr_abpvm_code> ret;
         const std::string uri = query[i].get_uri_lower();
         for (int m = 0; m < uri.size(); m++) {
+            end = uri.c_str() + uri.size();
             sp = uri.c_str() + m;
             for (int j = 0; j < 256; j++) {
                 if (m_table[j].num == 0) {
@@ -239,7 +240,7 @@ abpvm::match_table(std::vector<match_result> *result,
                 }
 
                 h[0] = (char)j;
-                if (! vmrun(h, sp, readnum)) {
+                if (! vmrun(h, sp, end - sp, readnum)) {
                     continue;
                 }
 
@@ -250,14 +251,14 @@ abpvm::match_table(std::vector<match_result> *result,
                     }
 
                     h[0] = (char)k;
-                    if (! vmrun(h, sp1, readnum)) {
+                    if (! vmrun(h, sp1, end - sp1, readnum)) {
                         continue;
                     }
 
                     const char *sp2 = sp1 + readnum;
                     for (auto &code: m_table[j].table[k].codes) {
                         pc = &code->code[sizeof(abpvm_head) + 2];
-                        if (vmrun(pc, sp2, readnum)) {
+                        if (vmrun(pc, sp2, end - sp2, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 ret.insert(code);
                             }
@@ -280,15 +281,16 @@ abpvm::match_scheme(std::vector<match_result> *result,
 {
     int  readnum;
     char h[2];
-    const char *pc, *sp;
+    const char *pc, *sp, *end;
 
     for (int i = 0; i < size; i++) {
         h[0] = OP_SKIP_SCHEME;
         h[1] = OP_MATCH;
 
         sp = query[i].get_uri_lower().c_str();
+        end = sp + query[i].get_uri_lower().size();
 
-        if (vmrun(h, sp, readnum)) {
+        if (vmrun(h, sp, end - sp, readnum)) {
             sp += readnum;
             for (int j = 0; j < 256; j++) {
                 if (m_table_scheme[j].num == 0) {
@@ -296,7 +298,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
                 }
 
                 h[0] = (char)j;
-                if (! vmrun(h, sp, readnum)) {
+                if (! vmrun(h, sp, end - sp, readnum)) {
                     continue;
                 }
 
@@ -307,7 +309,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
                     }
 
                     h[0] = (char)k;
-                    if (! vmrun(h, sp1, readnum)) {
+                    if (! vmrun(h, sp1, end - sp1, readnum)) {
                         continue;
                     }
 
@@ -315,7 +317,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
                     //std::cout << sp2 << std::endl;
                     for (auto &code: m_table_scheme[j].table[k].codes) {
                         pc = &code->code[sizeof(abpvm_head) + 4];
-                        if (vmrun(pc, sp2, readnum)) {
+                        if (vmrun(pc, sp2, end - sp2, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 result[i].push_back(match_result(code->file, code->original_rule, code->flags));
                             }
@@ -355,7 +357,7 @@ abpvm::match_no_hash(std::vector<match_result> *result,
             for (int j = 0; j < uri->size(); j++) {
                 const char *sp = uri->c_str() + j;
 
-                ret = vmrun(pc, sp, readnum);
+                ret = vmrun(pc, sp, uri->size() - j, readnum);
 
                 if (check_head || ret) {
                     break;
@@ -384,9 +386,10 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
 }
 
 bool
-abpvm::vmrun(const char *pc, const char *sp, int &readnum)
+abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
 {
     const char *origin = sp;
+    const char *end = sp + splen;
     
     for (;;) {
         if (IS_OP_CHAR(*pc)) {
@@ -421,14 +424,14 @@ abpvm::vmrun(const char *pc, const char *sp, int &readnum)
             char c = 0x7f & *pc;
             if (c == CHAR_SEPARATOR) {
                 while (! sepchar[(unsigned char)*sp]) {
-                    if (*sp == '\0') {
+                    if (sp == end) {
                         return false;
                     }
                     sp++;
                 }
             } else {
                 while (c != *sp) {
-                    if (*sp == '\0') {
+                    if (sp == end) {
                         return false;
                     }
                     sp++;

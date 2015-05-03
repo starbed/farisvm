@@ -117,7 +117,7 @@ private:
     abpvm_table0 m_table[256];
     std::vector<ptr_abpvm_code> m_no_hash; // cannot be hashed
 
-    bool vmrun(const char *pc, const char *sp, int &readnum);
+    bool vmrun(const char *pc, const char *sp, int splen, int &readnum);
     char *get_code(const std::string &rule, uint32_t flags);
     bool check_flag(ptr_abpvm_code code, const abpvm_query *query);
     void match_scheme(std::vector<match_result> *result, const abpvm_query *query, int size);
