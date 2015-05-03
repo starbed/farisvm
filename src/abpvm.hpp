@@ -95,16 +95,17 @@ private:
         std::string rule;
         uint32_t    flags;
         char       *code;
-        std::shared_ptr<BMH> bmh;
     };
 
     spin_rwlock m_lock;
 
-    std::vector<abpvm_code> m_codes;
+    typedef std::shared_ptr<abpvm_code> ptr_abpvm_code;
+
+    std::vector<ptr_abpvm_code> m_codes;
 
     bool vmrun(const char *pc, const char *sp);
     char *get_code(const std::string &rule, uint32_t flags);
-    bool check_flag(abpvm_code *code, const abpvm_query *query);
+    bool check_flag(ptr_abpvm_code code, const abpvm_query *query);
 };
 
 struct abpvm_exception : public std::exception

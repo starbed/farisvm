@@ -170,12 +170,12 @@ abpvm::~abpvm()
     spin_lock_write lock(m_lock);
 
     for (auto &p: m_codes) {
-        delete p.code;
+        delete p->code;
     }
 }
 
 bool
-abpvm::check_flag(abpvm_code *code, const abpvm_query *query)
+abpvm::check_flag(ptr_abpvm_code code, const abpvm_query *query)
 {
     if (code->flags & FLAG_DOMAIN) {
         const std::string *qd;
@@ -228,41 +228,34 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
             bool ret = false;
             const std::string *uri;
 
-            if (code.flags & FLAG_MATCH_CASE) {
+            if (code->flags & FLAG_MATCH_CASE) {
                 uri = &query[i].get_uri();
             } else {
                 uri = &query[i].get_uri_lower();
             }
 
 
-            if (code.bmh) {
-                auto pos = (*code.bmh)(uri->begin(), uri->end());
-                if (pos != uri->end()) {
-                    ret = true;
-                }
-            } else {
-                char *pc = code.code + sizeof(abpvm_head);
-                bool check_head = false;
+            char *pc = code->code + sizeof(abpvm_head);
+            bool check_head = false;
 
-                if (*pc == CHAR_HEAD) {
-                    check_head = true;
-                    pc++;
-                }
+            if (*pc == CHAR_HEAD) {
+                check_head = true;
+                pc++;
+            }
 
-                for (int j = 0; j < uri->size(); j++) {
-                    const char *sp = uri->c_str() + j;
+            for (int j = 0; j < uri->size(); j++) {
+                const char *sp = uri->c_str() + j;
 
-                    ret = vmrun(pc, sp);
+                ret = vmrun(pc, sp);
 
-                    if (check_head || ret) {
-                        break;
-                    }
+                if (check_head || ret) {
+                    break;
                 }
             }
 
             if (ret) {
-                if (check_flag(&code, &query[i])) {
-                    result[i].push_back(match_result(code.file, code.original_rule, code.flags));
+                if (check_flag(code, &query[i])) {
+                    result[i].push_back(match_result(code->file, code->original_rule, code->flags));
                 }
             }
         }
@@ -336,10 +329,10 @@ abpvm::print_asm()
     int total_match = 0;
 
     for (auto &code: m_codes) {
-        std::cout << "\"" << code.rule << "\"" << std::endl;
+        std::cout << "\"" << code->rule << "\"" << std::endl;
 
-        abpvm_head *head = (abpvm_head*)code.code;
-        char *inst = code.code + sizeof(abpvm_head);
+        abpvm_head *head = (abpvm_head*)code->code;
+        char *inst = code->code + sizeof(abpvm_head);
 
         total_inst += head->num_inst;
 
@@ -408,7 +401,7 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
 {
     std::vector<std::string> sp;
     std::string url_rule;
-    abpvm_code code;
+    ptr_abpvm_code code(new abpvm_code);
     uint32_t flags = 0;
 
     // do not add empty rules
@@ -499,12 +492,12 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
                                 abpvm_domain domain(d);
-                                code.ex_domains.push_back(domain);
+                                code->ex_domains.push_back(domain);
                             } else {
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
                                 abpvm_domain domain(d);
-                                code.domains.push_back(domain);
+                                code->domains.push_back(domain);
                             }
                         }
 
@@ -541,16 +534,12 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     url_rule = std::regex_replace(url_rule, re_barstar, "");
     url_rule = std::regex_replace(url_rule, re_sepbar, "^");
 
-    code.flags = flags;
-    code.file  = file;
-    code.rule  = url_rule;
-    code.code  = get_code(url_rule, flags);
+    code->flags = flags;
+    code->file  = file;
+    code->rule  = url_rule;
+    code->code  = get_code(url_rule, flags);
 
-    code.original_rule = rule;
-
-    if (code.code == nullptr) {
-        code.bmh = std::shared_ptr<BMH>(new BMH(url_rule.begin(), url_rule.end()));
-    }
+    code->original_rule = rule;
 
     spin_lock_write lock(m_lock);
     m_codes.push_back(code);
@@ -663,17 +652,12 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
     head.num_inst++;
 
     if (head.num_inst > 1) {
-        if (num_char + 1 == head.num_inst) {
-            // should use boyer-moore-horspool
-            return nullptr;
-        } else {
-            char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
+        char *code = new char[sizeof(head) + sizeof(inst[0]) * head.num_inst];
 
-            memcpy(code, &head, sizeof(head));
-            memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
+        memcpy(code, &head, sizeof(head));
+        memcpy(code + sizeof(head), inst, sizeof(inst[0]) * head.num_inst);
 
-            return code;
-        }
+        return code;
     } else {
         // no instructions
         std::ostringstream oss;
