@@ -7,7 +7,7 @@
 
 // #define CUIMODE
 
-#define NUM_THREAD 20
+#define NUM_THREAD 1
 
 std::mutex mtx;
 

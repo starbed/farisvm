@@ -217,12 +217,69 @@ abpvm::check_flag(ptr_abpvm_code code, const abpvm_query *query)
 }
 
 void
+abpvm::match_head(std::vector<match_result> *result,
+                  const abpvm_query *query, int size)
+{
+
+}
+
+void
+abpvm::match_scheme(std::vector<match_result> *result,
+                    const abpvm_query *query, int size)
+{
+    int  readnum;
+    char h[2];
+    const char *pc, *sp;
+
+    for (int i = 0; i < size; i++) {
+        // check table of skip_scheme
+        h[0] = OP_SKIP_SCHEME;
+        h[1] = OP_MATCH;
+
+        sp = query[i].get_uri_lower().c_str();
+
+        if (vmrun(h, sp, readnum)) {
+            sp += readnum;
+            for (int j = 0; j < 256; j++) {
+                if (m_table_scheme[j].num > 0) {
+                    h[0] = (char)j;
+                    if (vmrun(h, sp, readnum)) {
+                        const char *sp1 = sp + readnum;
+                        for (int k = 0; k < 256; k++) {
+                            if (! m_table_scheme[j].table[k].codes.empty()) {
+                                h[0] = (char)k;
+                                if (vmrun(h, sp1, readnum)) {
+                                    const char *sp2 = sp1 + readnum;
+                                    //std::cout << sp2 << std::endl;
+                                    for (auto &code: m_table_scheme[j].table[k].codes) {
+                                        pc = &code->code[sizeof(abpvm_head) + 4];
+                                        if (vmrun(pc, sp2, readnum)) {
+                                            if (check_flag(code, &query[i])) {
+                                                result[i].push_back(match_result(code->file, code->original_rule, code->flags));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void
 abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int size)
 {
     // TODO: check input
 
     spin_lock_read lock(m_lock);
 
+    match_scheme(result, query, size);
+    match_head(result, query, size);
+
+/*
     for (int i = 0; i < size; i++) {
         for (auto &code: m_codes) {
             bool ret = false;
@@ -260,11 +317,14 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
             }
         }
     }
+*/
 }
 
 bool
-abpvm::vmrun(const char *pc, const char *sp)
+abpvm::vmrun(const char *pc, const char *sp, int &readnum)
 {
+    const char *origin = sp;
+    
     for (;;) {
         if (IS_OP_CHAR(*pc)) {
             if (*pc == CHAR_SEPARATOR) {
@@ -278,6 +338,7 @@ abpvm::vmrun(const char *pc, const char *sp)
             }
             sp++;
         } else if (IS_OP_MATCH(*pc)) {
+            readnum = sp - origin;
             return true;
         } else if (IS_OP_SKIP_SCHEME(*pc)) {
             while (*sp !=':') {
@@ -543,13 +604,46 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
 
     spin_lock_write lock(m_lock);
     m_codes.push_back(code);
+
+    abpvm_head *head = (abpvm_head*)code->code;
+    char *c = &code->code[sizeof(abpvm_head)];
+    unsigned int idx1, idx2;
+    if (c[0] == CHAR_HEAD) {
+        if (IS_OP_SKIP_SCHEME(c[1])) {
+            if (head->num_inst < 5) {
+                m_short_codes_head.push_back(code);
+            } else {
+                idx1 = (unsigned int)c[2] & 0xFF;
+                idx2 = (unsigned int)c[3] & 0xFF;
+                m_table_scheme[idx1].table[idx2].codes.push_back(code);
+                m_table_scheme[idx1].num++;
+            }
+        } else {
+            if (head->num_inst < 4) {
+                m_short_codes_head.push_back(code);
+            } else {
+                idx1 = (unsigned int)c[1] & 0xFF;
+                idx2 = (unsigned int)c[2] & 0xFF;
+                m_table_head[idx1].table[idx2].codes.push_back(code);
+                m_table_head[idx1].num++;
+            }
+        }
+    } else {
+        if (head->num_inst < 3) {
+            m_short_codes.push_back(code);
+        } else {
+            idx1 = (unsigned int)c[0] & 0xFF;
+            idx2 = (unsigned int)c[1] & 0xFF;
+            m_table[idx1].table[idx2].codes.push_back(code);
+            m_table[idx1].num++;
+        }
+    }
 }
 
 char *
 abpvm::get_code(const std::string &rule, uint32_t flags)
 {
     abpvm_head head;
-    int num_char  = 0;
     char inst[INST_MAX];
     const char *sp = rule.c_str();
 
@@ -626,7 +720,6 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
         } else {
             if (urlchar[(unsigned char)sp[0]]) {
                 inst[head.num_inst] = OP_CHAR;
-                num_char++;
 
                 if (flags & FLAG_MATCH_CASE) {
                     inst[head.num_inst] = sp[0];
