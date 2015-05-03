@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <regex>
+#include <set>
 
 #define INST_MAX 4096
 
@@ -217,10 +218,60 @@ abpvm::check_flag(ptr_abpvm_code code, const abpvm_query *query)
 }
 
 void
-abpvm::match_head(std::vector<match_result> *result,
+abpvm::match_table(std::vector<match_result> *result,
                   const abpvm_query *query, int size)
 {
+    int readnum;
+    char h[2];
+    
+    const char *pc, *sp;
 
+    h[1] = OP_MATCH;
+
+    for (int i = 0; i < size; i++) {
+        std::set<ptr_abpvm_code> ret;
+        const std::string uri = query[i].get_uri_lower();
+        for (int m = 0; m < uri.size(); m++) {
+            sp = uri.c_str() + m;
+            for (int j = 0; j < 256; j++) {
+                if (m_table[j].num == 0) {
+                    continue;
+                }
+
+                h[0] = (char)j;
+                if (! vmrun(h, sp, readnum)) {
+                    continue;
+                }
+
+                const char *sp1 = sp + readnum;
+                for (int k = 0; k < 256; k++) {
+                    if (m_table[j].table[k].codes.empty()) {
+                        continue;
+                    }
+
+                    h[0] = (char)k;
+                    if (! vmrun(h, sp1, readnum)) {
+                        continue;
+                    }
+
+                    const char *sp2 = sp1 + readnum;
+                    for (auto &code: m_table[j].table[k].codes) {
+                        pc = &code->code[sizeof(abpvm_head) + 2];
+                        if (vmrun(pc, sp2, readnum)) {
+                            if (check_flag(code, &query[i])) {
+                                ret.insert(code);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (auto &code: ret) {
+            result[i].push_back(match_result(code->file,
+                                             code->original_rule, code->flags));
+        }
+    }
 }
 
 void
@@ -232,7 +283,6 @@ abpvm::match_scheme(std::vector<match_result> *result,
     const char *pc, *sp;
 
     for (int i = 0; i < size; i++) {
-        // check table of skip_scheme
         h[0] = OP_SKIP_SCHEME;
         h[1] = OP_MATCH;
 
@@ -241,28 +291,80 @@ abpvm::match_scheme(std::vector<match_result> *result,
         if (vmrun(h, sp, readnum)) {
             sp += readnum;
             for (int j = 0; j < 256; j++) {
-                if (m_table_scheme[j].num > 0) {
-                    h[0] = (char)j;
-                    if (vmrun(h, sp, readnum)) {
-                        const char *sp1 = sp + readnum;
-                        for (int k = 0; k < 256; k++) {
-                            if (! m_table_scheme[j].table[k].codes.empty()) {
-                                h[0] = (char)k;
-                                if (vmrun(h, sp1, readnum)) {
-                                    const char *sp2 = sp1 + readnum;
-                                    //std::cout << sp2 << std::endl;
-                                    for (auto &code: m_table_scheme[j].table[k].codes) {
-                                        pc = &code->code[sizeof(abpvm_head) + 4];
-                                        if (vmrun(pc, sp2, readnum)) {
-                                            if (check_flag(code, &query[i])) {
-                                                result[i].push_back(match_result(code->file, code->original_rule, code->flags));
-                                            }
-                                        }
-                                    }
-                                }
+                if (m_table_scheme[j].num == 0) {
+                    continue;
+                }
+
+                h[0] = (char)j;
+                if (! vmrun(h, sp, readnum)) {
+                    continue;
+                }
+
+                const char *sp1 = sp + readnum;
+                for (int k = 0; k < 256; k++) {
+                    if (m_table_scheme[j].table[k].codes.empty()) {
+                        continue;
+                    }
+
+                    h[0] = (char)k;
+                    if (! vmrun(h, sp1, readnum)) {
+                        continue;
+                    }
+
+                    const char *sp2 = sp1 + readnum;
+                    //std::cout << sp2 << std::endl;
+                    for (auto &code: m_table_scheme[j].table[k].codes) {
+                        pc = &code->code[sizeof(abpvm_head) + 4];
+                        if (vmrun(pc, sp2, readnum)) {
+                            if (check_flag(code, &query[i])) {
+                                result[i].push_back(match_result(code->file, code->original_rule, code->flags));
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+void
+abpvm::match_no_hash(std::vector<match_result> *result,
+                     const abpvm_query *query, int size)
+{
+    int readnum;
+
+    for (int i = 0; i < size; i++) {
+        for (auto &code: m_no_hash) {
+            bool ret = false;
+            const std::string *uri;
+
+            if (code->flags & FLAG_MATCH_CASE) {
+                uri = &query[i].get_uri();
+            } else {
+                uri = &query[i].get_uri_lower();
+            }
+
+            char *pc = code->code + sizeof(abpvm_head);
+            bool check_head = false;
+
+            if (*pc == CHAR_HEAD) {
+                check_head = true;
+                pc++;
+            }
+
+            for (int j = 0; j < uri->size(); j++) {
+                const char *sp = uri->c_str() + j;
+
+                ret = vmrun(pc, sp, readnum);
+
+                if (check_head || ret) {
+                    break;
+                }
+            }
+
+            if (ret) {
+                if (check_flag(code, &query[i])) {
+                    result[i].push_back(match_result(code->file, code->original_rule, code->flags));
                 }
             }
         }
@@ -277,47 +379,8 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
     spin_lock_read lock(m_lock);
 
     match_scheme(result, query, size);
-    match_head(result, query, size);
-
-/*
-    for (int i = 0; i < size; i++) {
-        for (auto &code: m_codes) {
-            bool ret = false;
-            const std::string *uri;
-
-            if (code->flags & FLAG_MATCH_CASE) {
-                uri = &query[i].get_uri();
-            } else {
-                uri = &query[i].get_uri_lower();
-            }
-
-
-            char *pc = code->code + sizeof(abpvm_head);
-            bool check_head = false;
-
-            if (*pc == CHAR_HEAD) {
-                check_head = true;
-                pc++;
-            }
-
-            for (int j = 0; j < uri->size(); j++) {
-                const char *sp = uri->c_str() + j;
-
-                ret = vmrun(pc, sp);
-
-                if (check_head || ret) {
-                    break;
-                }
-            }
-
-            if (ret) {
-                if (check_flag(code, &query[i])) {
-                    result[i].push_back(match_result(code->file, code->original_rule, code->flags));
-                }
-            }
-        }
-    }
-*/
+    match_table(result, query, size);
+    match_no_hash(result, query, size);
 }
 
 bool
@@ -611,7 +674,7 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     if (c[0] == CHAR_HEAD) {
         if (IS_OP_SKIP_SCHEME(c[1])) {
             if (head->num_inst < 5) {
-                m_short_codes_head.push_back(code);
+                m_no_hash.push_back(code);
             } else {
                 idx1 = (unsigned int)c[2] & 0xFF;
                 idx2 = (unsigned int)c[3] & 0xFF;
@@ -619,18 +682,11 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
                 m_table_scheme[idx1].num++;
             }
         } else {
-            if (head->num_inst < 4) {
-                m_short_codes_head.push_back(code);
-            } else {
-                idx1 = (unsigned int)c[1] & 0xFF;
-                idx2 = (unsigned int)c[2] & 0xFF;
-                m_table_head[idx1].table[idx2].codes.push_back(code);
-                m_table_head[idx1].num++;
-            }
+            m_no_hash.push_back(code);
         }
     } else {
         if (head->num_inst < 3) {
-            m_short_codes.push_back(code);
+            m_no_hash.push_back(code);
         } else {
             idx1 = (unsigned int)c[0] & 0xFF;
             idx2 = (unsigned int)c[1] & 0xFF;

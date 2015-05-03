@@ -114,16 +114,15 @@ private:
 
     std::vector<ptr_abpvm_code> m_codes;
     abpvm_table0 m_table_scheme[256];
-    abpvm_table0 m_table_head[256];
     abpvm_table0 m_table[256];
-    std::vector<ptr_abpvm_code> m_short_codes;
-    std::vector<ptr_abpvm_code> m_short_codes_head;
+    std::vector<ptr_abpvm_code> m_no_hash; // cannot be hashed
 
     bool vmrun(const char *pc, const char *sp, int &readnum);
     char *get_code(const std::string &rule, uint32_t flags);
     bool check_flag(ptr_abpvm_code code, const abpvm_query *query);
     void match_scheme(std::vector<match_result> *result, const abpvm_query *query, int size);
-    void match_head(std::vector<match_result> *result, const abpvm_query *query, int size);
+    void match_table(std::vector<match_result> *result, const abpvm_query *query, int size);
+    void match_no_hash(std::vector<match_result> *result, const abpvm_query *query, int size);
 };
 
 struct abpvm_exception : public std::exception
