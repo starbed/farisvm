@@ -671,7 +671,10 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     abpvm_head *head = (abpvm_head*)code->code;
     char *c = &code->code[sizeof(abpvm_head)];
     unsigned int idx1, idx2;
-    if (c[0] == CHAR_HEAD) {
+
+    if (code->flags & FLAG_MATCH_CASE) {
+        m_no_hash.push_back(code);
+    } else if (c[0] == CHAR_HEAD) {
         if (IS_OP_SKIP_SCHEME(c[1])) {
             if (head->num_inst < 5) {
                 m_no_hash.push_back(code);
