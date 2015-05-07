@@ -114,7 +114,7 @@ private:
 
     std::vector<ptr_abpvm_code> m_codes;
     abpvm_table0 m_table_scheme[256];
-    abpvm_table0 m_table[256];
+    abpvm_table0 m_table[128];
     std::vector<ptr_abpvm_code> m_no_hash; // cannot be hashed
 
     bool vmrun(const char *pc, const char *sp, int splen, int &readnum);
