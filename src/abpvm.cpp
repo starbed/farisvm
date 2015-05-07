@@ -223,7 +223,7 @@ void
 abpvm::match_table(std::vector<match_result> *result,
                   const abpvm_query *query, int size)
 {
-    int readnum;
+    int  readnum;
     char h[3];
     
     const char *pc, *sp, *end;
@@ -236,7 +236,16 @@ abpvm::match_table(std::vector<match_result> *result,
         for (int m = 0; m < uri.size(); m++) {
             end = uri.c_str() + uri.size();
             sp = uri.c_str() + m;
-            for (int j = *sp; j < 256; j++) {
+
+            int j;
+            char c[2];
+
+            c[0] = *sp;
+            c[1] = CHAR_SEPARATOR;
+
+            for (int n = 0; n < 2; n++) {
+                j = c[n];
+
                 if (m_table[j].num == 0) {
                     continue;
                 }
@@ -276,10 +285,6 @@ abpvm::match_table(std::vector<match_result> *result,
                     if (k < 0x7F) {
                         k = CHAR_SEPARATOR - 1;
                     }
-                }
-
-                if (j < 0x7F) {
-                    j = CHAR_SEPARATOR - 1;
                 }
             }
         }

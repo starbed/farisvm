@@ -34,20 +34,20 @@ match(int id, int th_num,
         std::vector<abpvm::match_result> result;
         vm.match(&result, &q, 1);
         if (result.size() > 0) {
-            std::lock_guard<std::mutex> lock(mtx);
-            std::string url = replace(urls[i], "\\", "\\\\");
-            url = replace(url, "\\\\\"", "\\\"");
-            std::cout << "{\"url\":\"" << replace(urls[i], "\"", "\\\"")
-                      << "\",\"result\":[{\"file\":\"" << result[0].file
-                      << "\",\"rule\":\"" << result[0].rule << "\"}";
-            int j = 0;
-            for (auto &ret: result) {
-                if (j++ > 0) {
-                    std::cout << ",{\"file\":\"" << ret.file
-                              << "\",\"rule\":\"" << ret.rule << "\"}";
-                }
-            }
-            std::cout << "]}" << std::endl;
+            // std::lock_guard<std::mutex> lock(mtx);
+            // std::string url = replace(urls[i], "\\", "\\\\");
+            // url = replace(url, "\\\\\"", "\\\"");
+            // std::cout << "{\"url\":\"" << replace(urls[i], "\"", "\\\"")
+            //           << "\",\"result\":[{\"file\":\"" << result[0].file
+            //           << "\",\"rule\":\"" << result[0].rule << "\"}";
+            // int j = 0;
+            // for (auto &ret: result) {
+            //     if (j++ > 0) {
+            //         std::cout << ",{\"file\":\"" << ret.file
+            //                   << "\",\"rule\":\"" << ret.rule << "\"}";
+            //     }
+            // }
+            // std::cout << "]}" << std::endl;
         }
         result.clear();
     }
@@ -158,22 +158,22 @@ main(int argc, char *argv[])
     }
 #else
     const auto startTime = std::chrono::system_clock::now();
-/*
-    for (std::string &i: urls) {
-        abpvm_query q;
-        q.set_uri(i);
-        std::vector<abpvm::match_result> result;
-        vm.match(&result, &q, 1);
 
-        if (result.size() > 0) {
-            std::cout << i << std::endl;
-            for (auto r: result) {
-                std::cout << r.file << ": " << r.rule << std::endl;
-            }
-            std::cout << std::endl;
-        }
-    }
-*/
+    // for (std::string &i: urls) {
+    //     abpvm_query q;
+    //     q.set_uri(i);
+    //     std::vector<abpvm::match_result> result;
+    //     vm.match(&result, &q, 1);
+
+    //     if (result.size() > 0) {
+    //         std::cout << i << std::endl;
+    //         for (auto r: result) {
+    //             std::cout << r.file << ": " << r.rule << std::endl;
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    // }
+
     std::thread *th[NUM_THREAD];
 
     int i;
