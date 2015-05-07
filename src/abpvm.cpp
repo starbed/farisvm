@@ -13,9 +13,11 @@
 #define OP_SKIP_SCHEME 0x83
 #define OP_MATCH       0x84
 
-#define CHAR_TAIL      0
-#define CHAR_HEAD      1
-#define CHAR_SEPARATOR 2
+#define CHAR_TAIL      0x7D
+#define CHAR_HEAD      0x7E
+#define CHAR_SEPARATOR 0x7F
+
+#define VMSTACK_MAX 1024
 
 #define IS_OP_CHAR(INST) (!(0x80 & (INST)))
 #define IS_OP_SKIP_SCHEME(INST) ((char)0x83 == (INST))
@@ -222,11 +224,11 @@ abpvm::match_table(std::vector<match_result> *result,
                   const abpvm_query *query, int size)
 {
     int readnum;
-    char h[2];
+    char h[3];
     
     const char *pc, *sp, *end;
 
-    h[1] = OP_MATCH;
+    h[2] = OP_MATCH;
 
     for (int i = 0; i < size; i++) {
         std::set<ptr_abpvm_code> ret;
@@ -234,36 +236,50 @@ abpvm::match_table(std::vector<match_result> *result,
         for (int m = 0; m < uri.size(); m++) {
             end = uri.c_str() + uri.size();
             sp = uri.c_str() + m;
-            for (int j = 0; j < 256; j++) {
+            for (int j = *sp; j < 240; j++) {
                 if (m_table[j].num == 0) {
                     continue;
                 }
 
                 h[0] = (char)j;
+                h[1] = OP_MATCH;
                 if (! vmrun(h, sp, end - sp, readnum)) {
                     continue;
                 }
 
-                const char *sp1 = sp + readnum;
-                for (int k = 0; k < 256; k++) {
+                int k;
+                if (IS_OP_CHAR(h[0])) {
+                    k = sp[1];
+                } else {
+                    k = 0;
+                }
+
+                for (; k < 240; k++) {
                     if (m_table[j].table[k].codes.empty()) {
                         continue;
                     }
 
-                    h[0] = (char)k;
-                    if (! vmrun(h, sp1, end - sp1, readnum)) {
+                    h[1] = (char)k;
+                    if (! vmrun(h, sp, end - sp, readnum)) {
                         continue;
                     }
 
-                    const char *sp2 = sp1 + readnum;
                     for (auto &code: m_table[j].table[k].codes) {
-                        pc = &code->code[sizeof(abpvm_head) + 2];
-                        if (vmrun(pc, sp2, end - sp2, readnum)) {
+                        pc = &code->code[sizeof(abpvm_head)];
+                        if (vmrun(pc, sp, end - sp, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 ret.insert(code);
                             }
                         }
                     }
+
+                    if (k < 0x7F) {
+                        k = CHAR_SEPARATOR - 1;
+                    }
+                }
+
+                if (j < 0x7F) {
+                    j = CHAR_SEPARATOR - 1;
                 }
             }
         }
@@ -280,8 +296,10 @@ abpvm::match_scheme(std::vector<match_result> *result,
                     const abpvm_query *query, int size)
 {
     int  readnum;
-    char h[2];
+    char h[3];
     const char *pc, *sp, *end;
+
+    h[2] = OP_MATCH;
 
     for (int i = 0; i < size; i++) {
         h[0] = OP_SKIP_SCHEME;
@@ -292,37 +310,50 @@ abpvm::match_scheme(std::vector<match_result> *result,
 
         if (vmrun(h, sp, end - sp, readnum)) {
             sp += readnum;
-            for (int j = 0; j < 256; j++) {
+            for (int j = *sp; j < 240; j++) {
                 if (m_table_scheme[j].num == 0) {
                     continue;
                 }
 
                 h[0] = (char)j;
+                h[1] = OP_MATCH;
                 if (! vmrun(h, sp, end - sp, readnum)) {
                     continue;
                 }
 
-                const char *sp1 = sp + readnum;
-                for (int k = 0; k < 256; k++) {
+                int k;
+                if (IS_OP_CHAR(h[0])) {
+                    k = sp[1];
+                } else {
+                    k = 0;
+                }
+
+                for (; k < 240; k++) {
                     if (m_table_scheme[j].table[k].codes.empty()) {
                         continue;
                     }
 
-                    h[0] = (char)k;
-                    if (! vmrun(h, sp1, end - sp1, readnum)) {
+                    h[1] = (char)k;
+                    if (! vmrun(h, sp, end - sp, readnum)) {
                         continue;
                     }
 
-                    const char *sp2 = sp1 + readnum;
-                    //std::cout << sp2 << std::endl;
                     for (auto &code: m_table_scheme[j].table[k].codes) {
-                        pc = &code->code[sizeof(abpvm_head) + 4];
-                        if (vmrun(pc, sp2, end - sp2, readnum)) {
+                        pc = &code->code[sizeof(abpvm_head) + 2];
+                        if (vmrun(pc, sp, end - sp, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 result[i].push_back(match_result(code->file, code->original_rule, code->flags));
                             }
                         }
                     }
+
+                    if (k < 0x7F) {
+                        k = CHAR_SEPARATOR - 1;
+                    }
+                }
+
+                if (j < 0x7F) {
+                    j = CHAR_SEPARATOR - 1;
                 }
             }
         }
@@ -390,16 +421,37 @@ abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
 {
     const char *origin = sp;
     const char *end = sp + splen;
-    
+
+    struct {
+        const char *pc;
+        const char *sp;
+    } stack_ptr[VMSTACK_MAX];
+
+    int stack_pos = 0;
+
     for (;;) {
         if (IS_OP_CHAR(*pc)) {
             if (*pc == CHAR_SEPARATOR) {
                 if (! sepchar[(unsigned char)*sp]) {
-                    return false;
+                    if (stack_pos == 0) {
+                        return false;
+                    } else {
+                        stack_pos--;
+                        pc = stack_ptr[stack_pos].pc;
+                        sp = stack_ptr[stack_pos].sp;
+                        continue;
+                    }
                 }
             } else {
                 if (*pc != *sp) {
-                    return false;
+                    if (stack_pos == 0) {
+                        return false;
+                    } else {
+                        stack_pos--;
+                        pc = stack_ptr[stack_pos].pc;
+                        sp = stack_ptr[stack_pos].sp;
+                        continue;
+                    }
                 }
             }
             sp++;
@@ -436,6 +488,12 @@ abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
                     }
                     sp++;
                 }
+            }
+            // push to stack
+            if (stack_pos < VMSTACK_MAX) {
+                stack_ptr[stack_pos].sp = sp + 1;
+                stack_ptr[stack_pos].pc = pc;
+                stack_pos++;
             }
         }
 
