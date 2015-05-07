@@ -310,7 +310,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
 
         if (vmrun(h, sp, end - sp, readnum)) {
             sp += readnum;
-            for (int j = *sp; j < 240; j++) {
+            for (int j = *sp; j < 256; j++) {
                 if (m_table_scheme[j].num == 0) {
                     continue;
                 }
@@ -328,7 +328,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
                     k = 0;
                 }
 
-                for (; k < 240; k++) {
+                for (; k < 256; k++) {
                     if (m_table_scheme[j].table[k].codes.empty()) {
                         continue;
                     }
