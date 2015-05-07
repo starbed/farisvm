@@ -236,7 +236,7 @@ abpvm::match_table(std::vector<match_result> *result,
         for (int m = 0; m < uri.size(); m++) {
             end = uri.c_str() + uri.size();
             sp = uri.c_str() + m;
-            for (int j = *sp; j < 240; j++) {
+            for (int j = *sp; j < 256; j++) {
                 if (m_table[j].num == 0) {
                     continue;
                 }
@@ -254,7 +254,7 @@ abpvm::match_table(std::vector<match_result> *result,
                     k = 0;
                 }
 
-                for (; k < 240; k++) {
+                for (; k < 256; k++) {
                     if (m_table[j].table[k].codes.empty()) {
                         continue;
                     }

@@ -34,20 +34,20 @@ match(int id, int th_num,
         std::vector<abpvm::match_result> result;
         vm.match(&result, &q, 1);
         if (result.size() > 0) {
-            std::lock_guard<std::mutex> lock(mtx);
-            std::string url = replace(urls[i], "\\", "\\\\");
-            url = replace(url, "\\\\\"", "\\\"");
-            std::cout << "{\"url\":\"" << replace(urls[i], "\"", "\\\"")
-                      << "\",\"result\":[{\"file\":\"" << result[0].file
-                      << "\",\"rule\":\"" << result[0].rule << "\"}";
-            int j = 0;
-            for (auto &ret: result) {
-                if (j++ > 0) {
-                    std::cout << ",{\"file\":\"" << ret.file
-                              << "\",\"rule\":\"" << ret.rule << "\"}";
-                }
-            }
-            std::cout << "]}" << std::endl;
+            // std::lock_guard<std::mutex> lock(mtx);
+            // std::string url = replace(urls[i], "\\", "\\\\");
+            // url = replace(url, "\\\\\"", "\\\"");
+            // std::cout << "{\"url\":\"" << replace(urls[i], "\"", "\\\"")
+            //           << "\",\"result\":[{\"file\":\"" << result[0].file
+            //           << "\",\"rule\":\"" << result[0].rule << "\"}";
+            // int j = 0;
+            // for (auto &ret: result) {
+            //     if (j++ > 0) {
+            //         std::cout << ",{\"file\":\"" << ret.file
+            //                   << "\",\"rule\":\"" << ret.rule << "\"}";
+            //     }
+            // }
+            // std::cout << "]}" << std::endl;
         }
         result.clear();
     }
