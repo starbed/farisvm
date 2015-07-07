@@ -38,25 +38,25 @@
 #define FLAG_NOT_COLLAPSE          (0x00000001 << 25)
 #define FLAG_DOMAIN                (0x00000001 << 26)
 
-class farisvm_query {
-public:
-    void set_uri(const std::string &uri, const std::string &ref);
-    const std::string &get_uri() const { return m_uri; }
-    const std::string &get_uri_lower() const { return m_uri_lower; }
-    const std::string &get_domain() const { return m_domain; }
-    const std::string &get_domain_lower() const { return m_domain_lower; }
-    bool is_third() const { return m_is_third; }
-
-private:
-    std::string m_uri;
-    std::string m_uri_lower;
-    std::string m_domain;
-    std::string m_domain_lower;
-    bool m_is_third;
-};
-
 class farisvm {
 public:
+    class query_uri {
+    public:
+        void set_uri(const std::string &uri, const std::string &ref);
+        const std::string &get_uri() const { return m_uri; }
+        const std::string &get_uri_lower() const { return m_uri_lower; }
+        const std::string &get_domain() const { return m_domain; }
+        const std::string &get_domain_lower() const { return m_domain_lower; }
+        bool is_third() const { return m_is_third; }
+
+    private:
+        std::string m_uri;
+        std::string m_uri_lower;
+        std::string m_domain;
+        std::string m_domain_lower;
+        bool m_is_third;
+    };
+
     struct match_result {
         std::string file;
         std::string rule;
@@ -70,7 +70,7 @@ public:
 
     void add_rule(const std::string &rule, const std::string &file);
     void print_asm();
-    void match(std::vector<match_result> *result, const farisvm_query *query, int size);
+    void match(std::vector<match_result> *result, const query_uri *query, int size);
 
 private:
     typedef boost::algorithm::boyer_moore_horspool<std::string::iterator> BMH;
@@ -119,10 +119,10 @@ private:
 
     bool vmrun(const char *pc, const char *sp, int splen, int &readnum);
     char *get_code(const std::string &rule, uint32_t flags);
-    bool check_flag(ptr_farisvm_code code, const farisvm_query *query);
-    void match_scheme(std::vector<match_result> *result, const farisvm_query *query, int size);
-    void match_table(std::vector<match_result> *result, const farisvm_query *query, int size);
-    void match_no_hash(std::vector<match_result> *result, const farisvm_query *query, int size);
+    bool check_flag(ptr_farisvm_code code, const query_uri *query);
+    void match_scheme(std::vector<match_result> *result, const query_uri *query, int size);
+    void match_table(std::vector<match_result> *result, const query_uri *query, int size);
+    void match_no_hash(std::vector<match_result> *result, const query_uri *query, int size);
 };
 
 struct farisvm_exception : public std::exception

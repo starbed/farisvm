@@ -96,7 +96,7 @@ farisvm_exception::what() const throw()
 }
 
 void
-farisvm_query::set_uri(const std::string &uri, const std::string &ref)
+farisvm::query_uri::set_uri(const std::string &uri, const std::string &ref)
 {
     m_uri = uri;
     m_uri_lower = uri;
@@ -178,7 +178,7 @@ farisvm::~farisvm()
 }
 
 bool
-farisvm::check_flag(ptr_farisvm_code code, const farisvm_query *query)
+farisvm::check_flag(ptr_farisvm_code code, const query_uri *query)
 {
     if (code->flags & FLAG_DOMAIN) {
         const std::string *qd;
@@ -221,7 +221,7 @@ farisvm::check_flag(ptr_farisvm_code code, const farisvm_query *query)
 
 void
 farisvm::match_table(std::vector<match_result> *result,
-                  const farisvm_query *query, int size)
+                  const query_uri *query, int size)
 {
     int  readnum;
     char h[3];
@@ -298,7 +298,7 @@ farisvm::match_table(std::vector<match_result> *result,
 
 void
 farisvm::match_scheme(std::vector<match_result> *result,
-                    const farisvm_query *query, int size)
+                    const query_uri *query, int size)
 {
     int  readnum;
     char h[3];
@@ -367,7 +367,7 @@ farisvm::match_scheme(std::vector<match_result> *result,
 
 void
 farisvm::match_no_hash(std::vector<match_result> *result,
-                     const farisvm_query *query, int size)
+                     const query_uri *query, int size)
 {
     int readnum;
 
@@ -410,7 +410,7 @@ farisvm::match_no_hash(std::vector<match_result> *result,
 }
 
 void
-farisvm::match(std::vector<match_result> *result, const farisvm_query *query, int size)
+farisvm::match(std::vector<match_result> *result, const query_uri *query, int size)
 {
     // TODO: check input
 

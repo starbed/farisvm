@@ -13,7 +13,7 @@ main(int argc, char *argv[])
 
     // do matching
     std::vector<farisvm::match_result> result[3];
-    farisvm_query query[3];
+    farisvm::query_uri query[3];
 
     query[0].set_uri("https://www.google.com/", "http://referer.com/");
     query[1].set_uri("http://example.com/index.html", "http://referer.com/");
