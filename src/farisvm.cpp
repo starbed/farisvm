@@ -1,4 +1,4 @@
-#include "abpvm.hpp"
+#include "farisvm.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -79,24 +79,24 @@ int schemechar[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-abpvm_exception::abpvm_exception(const std::string msg) : m_msg(msg)
+farisvm_exception::farisvm_exception(const std::string msg) : m_msg(msg)
 {
 
 }
 
-abpvm_exception::~abpvm_exception() throw()
+farisvm_exception::~farisvm_exception() throw()
 {
 
 }
 
 const char*
-abpvm_exception::what() const throw()
+farisvm_exception::what() const throw()
 {
     return m_msg.c_str();
 }
 
 void
-abpvm_query::set_uri(const std::string &uri, const std::string &ref)
+farisvm_query::set_uri(const std::string &uri, const std::string &ref)
 {
     m_uri = uri;
     m_uri_lower = uri;
@@ -163,12 +163,12 @@ abpvm_query::set_uri(const std::string &uri, const std::string &ref)
     }
 }
 
-abpvm::abpvm()
+farisvm::farisvm()
 {
 
 }
 
-abpvm::~abpvm()
+farisvm::~farisvm()
 {
     spin_lock_write lock(m_lock);
 
@@ -178,7 +178,7 @@ abpvm::~abpvm()
 }
 
 bool
-abpvm::check_flag(ptr_abpvm_code code, const abpvm_query *query)
+farisvm::check_flag(ptr_farisvm_code code, const farisvm_query *query)
 {
     if (code->flags & FLAG_DOMAIN) {
         const std::string *qd;
@@ -220,8 +220,8 @@ abpvm::check_flag(ptr_abpvm_code code, const abpvm_query *query)
 }
 
 void
-abpvm::match_table(std::vector<match_result> *result,
-                  const abpvm_query *query, int size)
+farisvm::match_table(std::vector<match_result> *result,
+                  const farisvm_query *query, int size)
 {
     int  readnum;
     char h[3];
@@ -231,7 +231,7 @@ abpvm::match_table(std::vector<match_result> *result,
     h[2] = OP_MATCH;
 
     for (int i = 0; i < size; i++) {
-        std::set<ptr_abpvm_code> ret;
+        std::set<ptr_farisvm_code> ret;
         const std::string uri = query[i].get_uri_lower();
         for (int m = 0; m < uri.size(); m++) {
             end = uri.c_str() + uri.size();
@@ -274,7 +274,7 @@ abpvm::match_table(std::vector<match_result> *result,
                     }
 
                     for (auto &code: m_table[j].table[k].codes) {
-                        pc = &code->code[sizeof(abpvm_head)];
+                        pc = &code->code[sizeof(farisvm_head)];
                         if (vmrun(pc, sp, end - sp, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 ret.insert(code);
@@ -297,8 +297,8 @@ abpvm::match_table(std::vector<match_result> *result,
 }
 
 void
-abpvm::match_scheme(std::vector<match_result> *result,
-                    const abpvm_query *query, int size)
+farisvm::match_scheme(std::vector<match_result> *result,
+                    const farisvm_query *query, int size)
 {
     int  readnum;
     char h[3];
@@ -344,7 +344,7 @@ abpvm::match_scheme(std::vector<match_result> *result,
                     }
 
                     for (auto &code: m_table_scheme[j].table[k].codes) {
-                        pc = &code->code[sizeof(abpvm_head) + 2];
+                        pc = &code->code[sizeof(farisvm_head) + 2];
                         if (vmrun(pc, sp, end - sp, readnum)) {
                             if (check_flag(code, &query[i])) {
                                 result[i].push_back(match_result(code->file, code->original_rule, code->flags));
@@ -366,8 +366,8 @@ abpvm::match_scheme(std::vector<match_result> *result,
 }
 
 void
-abpvm::match_no_hash(std::vector<match_result> *result,
-                     const abpvm_query *query, int size)
+farisvm::match_no_hash(std::vector<match_result> *result,
+                     const farisvm_query *query, int size)
 {
     int readnum;
 
@@ -382,7 +382,7 @@ abpvm::match_no_hash(std::vector<match_result> *result,
                 uri = &query[i].get_uri_lower();
             }
 
-            char *pc = code->code + sizeof(abpvm_head);
+            char *pc = code->code + sizeof(farisvm_head);
             bool check_head = false;
 
             if (*pc == CHAR_HEAD) {
@@ -410,7 +410,7 @@ abpvm::match_no_hash(std::vector<match_result> *result,
 }
 
 void
-abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int size)
+farisvm::match(std::vector<match_result> *result, const farisvm_query *query, int size)
 {
     // TODO: check input
 
@@ -422,7 +422,7 @@ abpvm::match(std::vector<match_result> *result, const abpvm_query *query, int si
 }
 
 bool
-abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
+farisvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
 {
     const char *origin = sp;
     const char *end = sp + splen;
@@ -448,7 +448,7 @@ abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
                     }
                 }
             } else {
-                if (*pc != *sp) {
+                if (*pc != *sp && ! (*pc == CHAR_TAIL && sp == end)) {
                     if (stack_pos == 0) {
                         return false;
                     } else {
@@ -510,7 +510,7 @@ abpvm::vmrun(const char *pc, const char *sp, int splen, int &readnum)
 }
 
 void
-abpvm::print_asm()
+farisvm::print_asm()
 {
     int total_inst = 0;
     int total_char = 0;
@@ -521,8 +521,8 @@ abpvm::print_asm()
     for (auto &code: m_codes) {
         std::cout << "\"" << code->rule << "\"" << std::endl;
 
-        abpvm_head *head = (abpvm_head*)code->code;
-        char *inst = code->code + sizeof(abpvm_head);
+        farisvm_head *head = (farisvm_head*)code->code;
+        char *inst = code->code + sizeof(farisvm_head);
 
         total_inst += head->num_inst;
 
@@ -587,11 +587,11 @@ split(const std::string &str, const std::string &delim,
 }
 
 void
-abpvm::add_rule(const std::string &rule, const std::string &file)
+farisvm::add_rule(const std::string &rule, const std::string &file)
 {
     std::vector<std::string> sp;
     std::string url_rule;
-    ptr_abpvm_code code(new abpvm_code);
+    ptr_farisvm_code code(new farisvm_code);
     uint32_t flags = 0;
 
     // do not add empty rules
@@ -681,12 +681,12 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
                                 d.erase(0);
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
-                                abpvm_domain domain(d);
+                                farisvm_domain domain(d);
                                 code->ex_domains.push_back(domain);
                             } else {
                                 std::transform(d.begin(), d.end(),
                                                d.begin(), ::tolower);
-                                abpvm_domain domain(d);
+                                farisvm_domain domain(d);
                                 code->domains.push_back(domain);
                             }
                         }
@@ -734,8 +734,8 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
     spin_lock_write lock(m_lock);
     m_codes.push_back(code);
 
-    abpvm_head *head = (abpvm_head*)code->code;
-    char *c = &code->code[sizeof(abpvm_head)];
+    farisvm_head *head = (farisvm_head*)code->code;
+    char *c = &code->code[sizeof(farisvm_head)];
     unsigned int idx1, idx2;
 
     if (code->flags & FLAG_MATCH_CASE) {
@@ -766,9 +766,9 @@ abpvm::add_rule(const std::string &rule, const std::string &file)
 }
 
 char *
-abpvm::get_code(const std::string &rule, uint32_t flags)
+farisvm::get_code(const std::string &rule, uint32_t flags)
 {
-    abpvm_head head;
+    farisvm_head head;
     char inst[INST_MAX];
     const char *sp = rule.c_str();
 
@@ -800,7 +800,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
             std::ostringstream oss;
             oss << rule << ":\n"
                 << "\ttoo many instructions (exceeded " << INST_MAX << ")";
-            throw(abpvm_exception(oss.str()));
+            throw(farisvm_exception(oss.str()));
         }
 
         if (sp[0] == '*') {
@@ -821,7 +821,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
                     oss << rule << ":\n"
                         << "\tinvalid character at " << &sp[1] - rule.c_str()
                         << " (" << sp[1] << ")";
-                    throw(abpvm_exception(oss.str()));
+                    throw(farisvm_exception(oss.str()));
                 }
             }
 
@@ -838,7 +838,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
                 oss << rule << ":\n"
                     << "\tinvalid character at " << &sp[0] - rule.c_str()
                     << " (" << sp[0] << ")";
-                throw(abpvm_exception(oss.str()));
+                throw(farisvm_exception(oss.str()));
             }
 
             sp++;
@@ -857,7 +857,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
                 oss << rule << ":\n"
                     << "\tinvalid character at " << &sp[0] - rule.c_str()
                     << " (" << sp[0] << ")";
-                throw(abpvm_exception(oss.str()));
+                throw(farisvm_exception(oss.str()));
             }
 
             sp++;
@@ -880,7 +880,7 @@ abpvm::get_code(const std::string &rule, uint32_t flags)
         // no instructions
         std::ostringstream oss;
         oss << rule << ": no instructions";
-        throw(abpvm_exception(oss.str()));
+        throw(farisvm_exception(oss.str()));
     }
 
     // never reach here

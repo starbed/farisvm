@@ -1,5 +1,7 @@
-#ifndef ABPVM_C
-#define ABPVM_C
+#ifndef FARISVM_C
+#define FARISVM_C
+
+#include "spin_rwlock.hpp"
 
 #include <string>
 #include <vector>
@@ -36,102 +38,104 @@
 #define FLAG_NOT_COLLAPSE          (0x00000001 << 25)
 #define FLAG_DOMAIN                (0x00000001 << 26)
 
-class abpvm_query {
+class farisvm_query {
 public:
-    abpvm_query();
-    virtual ~abpvm_query();
-
     void set_uri(const std::string &uri, const std::string &ref);
-    int  get_len() const { return m_len; }
-    const char *get_uri() const { return m_uri; }
-    const char *get_uri_lower() const { return m_uri_lower; }
+    const std::string &get_uri() const { return m_uri; }
+    const std::string &get_uri_lower() const { return m_uri_lower; }
     const std::string &get_domain() const { return m_domain; }
     const std::string &get_domain_lower() const { return m_domain_lower; }
     bool is_third() const { return m_is_third; }
 
 private:
-    char *m_uri;
-    char *m_uri_lower;
-    int   m_len;
+    std::string m_uri;
+    std::string m_uri_lower;
     std::string m_domain;
     std::string m_domain_lower;
     bool m_is_third;
 };
 
-class abpvm {
+class farisvm {
 public:
     struct match_result {
         std::string file;
         std::string rule;
+        uint32_t    flags;
 
-        match_result(const std::string &f, const std::string r) : file(f), rule(r) {}
+        match_result(const std::string &f, const std::string r, uint32_t flg) : file(f), rule(r), flags(flg) {}
     };
 
-    struct abpvm_head {
-        uint32_t flags;
-        uint32_t num_inst;
-    };
-
-    abpvm();
-    virtual ~abpvm();
+    farisvm();
+    virtual ~farisvm();
 
     void add_rule(const std::string &rule, const std::string &file);
     void print_asm();
-    void match(std::vector<match_result> *result, const abpvm_query *query, int size);
+    void match(std::vector<match_result> *result, const farisvm_query *query, int size);
 
 private:
     typedef boost::algorithm::boyer_moore_horspool<std::string::iterator> BMH;
 
-    struct abpvm_domain {
-        abpvm_domain(std::string d) : name(d), bmh(new BMH(d.begin(), d.end())) { }
+    struct farisvm_domain {
+        farisvm_domain(std::string d) : name(d), bmh(new BMH(d.begin(), d.end())) { }
 
         std::string name;
         std::shared_ptr<BMH> bmh;
     };
 
-    struct abpvm_code {
-        std::vector<abpvm_domain> domains;
-        std::vector<abpvm_domain> ex_domains;
+    struct farisvm_head {
+        uint32_t flags;
+        uint32_t num_inst;
+    };
+
+    struct farisvm_code {
+        std::vector<farisvm_domain> domains;
+        std::vector<farisvm_domain> ex_domains;
         std::string file;
         std::string original_rule;
         std::string rule;
         uint32_t    flags;
-        int         code_len;
-        int         code_len_align;
         char       *code;
     };
 
-    std::vector<std::shared_ptr<abpvm_code>> m_codes;
+    spin_rwlock m_lock;
 
-    char  *m_d_codes_buf;
-    int   *m_d_codes_idx;
-    char  *m_d_query;
-    char  *m_d_query_lower;
-    int   *m_d_scheme_len;
-    int   *m_d_result;
-    bool   m_need_gpu_init;
-    int    m_grid_dim;
-    int    m_block_dim;
-    int    m_code_bytes;
+    typedef std::shared_ptr<farisvm_code> ptr_farisvm_code;
 
-    void get_gpu_prop();
-    void init_gpu();
-    int  skip_scheme(const char *sp);
-    bool vmrun(const char *pc, const char *sp);
-    char *get_code(const std::string &rule, uint32_t flags, int &len);
-    void split(const std::string &str, const std::string &delim,
-               std::vector<std::string> &ret);
-    bool check_flag(std::shared_ptr<abpvm_code> code, const abpvm_query *query);
+    struct farisvm_table1 {
+        std::vector<ptr_farisvm_code> codes;
+    };
+
+    struct farisvm_table0 {
+        int num;
+        farisvm_table1 table[256];
+
+        farisvm_table0() : num(0) { }
+    };
+
+    std::vector<ptr_farisvm_code> m_codes;
+    farisvm_table0 m_table_scheme[256];
+    farisvm_table0 m_table[128];
+    std::vector<ptr_farisvm_code> m_no_hash; // cannot be hashed
+
+    bool vmrun(const char *pc, const char *sp, int splen, int &readnum);
+    char *get_code(const std::string &rule, uint32_t flags);
+    bool check_flag(ptr_farisvm_code code, const farisvm_query *query);
+    void match_scheme(std::vector<match_result> *result, const farisvm_query *query, int size);
+    void match_table(std::vector<match_result> *result, const farisvm_query *query, int size);
+    void match_no_hash(std::vector<match_result> *result, const farisvm_query *query, int size);
 };
 
-struct abpvm_exception : public std::exception
+struct farisvm_exception : public std::exception
 {
-    abpvm_exception(const std::string msg);
-    ~abpvm_exception() throw();
+    farisvm_exception(const std::string msg);
+    ~farisvm_exception() throw();
 
     const char* what() const throw();
 
     std::string m_msg;
 };
 
-#endif // ABPVM
+void split(const std::string &str, const std::string &delim,
+           std::vector<std::string> &ret);
+
+#endif // FARISVM

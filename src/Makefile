@@ -1,7 +1,7 @@
-all: abpvm
+all: farisvm
 
-abpvm: main.cpp abpvm.cpp abpvm.hpp
-	c++ main.cpp abpvm.cpp -std=c++11 -O3 -Wall -o abpvm
+farisvm: example.cpp farisvm.cpp farisvm.hpp
+	c++ example.cpp farisvm.cpp -std=c++11 -O3 -Wall -o farisvm
 
 clean:
-	rm -f abpvm
+	rm -f farisvm
