@@ -1,6 +1,13 @@
 #ifndef SPIN_RWLOCK_HPP
 #define SPIN_RWLOCK_HPP
 
+#if defined(__x86_64__) || defined(__i386__)
+    #include <xmmintrin.h>
+    #define _MM_PAUSE _mm_pause
+#else
+    #define _MM_PAUSE
+#endif // __x86_64__ || __i386__
+
 class spin_lock_read;
 class spin_lock_write;
 
@@ -25,11 +32,12 @@ public:
         while (lock.m_write_count > 0) {
             if (wc > lock.m_write_count || i++ > 1000000) // to avoid starvation
                 break;
+            _MM_PAUSE();
         }
 
         while (__sync_lock_test_and_set(&lock.m_is_writing, 1)) {
-            while (lock.m_is_writing) ;
-            // busy-wait
+            while (lock.m_is_writing)
+                _MM_PAUSE(); // busy-wait
         }
         __sync_fetch_and_add(&lock.m_read_count, 1);
         __sync_lock_release(&m_lock.m_is_writing);
@@ -41,8 +49,8 @@ public:
 
     void unlock() {
         while (__sync_lock_test_and_set(&m_lock.m_is_writing, 1)) {
-            while (m_lock.m_is_writing) ;
-            // busy-wait
+            while (m_lock.m_is_writing)
+                _MM_PAUSE(); // busy-wait
         }
         __sync_fetch_and_sub(&m_lock.m_read_count, 1);
         __sync_lock_release(&m_lock.m_is_writing);
@@ -61,8 +69,8 @@ public:
                 continue;
 
             while (__sync_lock_test_and_set(&lock.m_is_writing, 1)) {
-                while (lock.m_is_writing) ;
-                // busy-wait
+                while (lock.m_is_writing)
+                    _MM_PAUSE(); // busy-wait
             }
 
             if (lock.m_read_count > 0) {
