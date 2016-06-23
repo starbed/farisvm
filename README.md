@@ -56,6 +56,11 @@ main(int argc, char *argv[])
     query[2].set_uri("http://example.com/index.swf", "http://referer.com/");
 
     // do matching
+    //
+    // match(result, query, query_num)
+    //     result: the results of matching
+    //     query: URIs to be matched
+    //     query_num: the number or URIs
     vm.match(result, query, 3);
 
     for (int i = 0; i < 3; i++) {
