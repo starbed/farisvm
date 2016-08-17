@@ -1,4 +1,4 @@
-# FARIS: Fast and Memory-efficient URL Filter
+# FARIS: the FAst uniform Resource Identifier-Specific filter
 
 ## What?
 
