@@ -78,6 +78,4 @@ main(int argc, char *argv[])
 
 ## Publication
 
-Yuuki Takano and Ryosuke Miura,
-"FARIS: Fast and Memory-efficient URL Filter by Domain Specific Machine",
-International Conference on IT Convergence and Security 2016 (ICITCS 2016) (to appear)
+Yuuki Takano and Ryosuke Miura, "FARIS: Fast and Memory-efficient URL Filter by Domain Specific Machine", IEEE International Conference on IT Convergence and Security 2016 (ICITCS 2016), Sep. 2016, ISBN 987-1-5090-3764-3, pp. 204-210.
