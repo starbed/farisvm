@@ -1,93 +1,94 @@
 #ifndef SPIN_RWLOCK_HPP
 #define SPIN_RWLOCK_HPP
 
+#include <pthread.h>
+
 #if defined(__x86_64__) || defined(__i386__)
     #include <xmmintrin.h>
-    #define _MM_PAUSE _mm_pause
+    #define _MM_PAUSE _mm_pause()
 #else
     #define _MM_PAUSE
 #endif // __x86_64__ || __i386__
 
-class spin_lock_read;
-class spin_lock_write;
+class spin_rwlock_read;
+class spin_rwlock_write;
 
 class spin_rwlock {
 public:
-    spin_rwlock() : m_read_count(0), m_write_count(0), m_is_writing(0) { }
-
-private:
-    volatile int m_read_count;
-    volatile int m_write_count;
-    volatile int m_is_writing;
-
-    friend class spin_lock_read;
-    friend class spin_lock_write;
-};
-
-class spin_lock_read {
-public:
-    spin_lock_read(spin_rwlock &lock) : m_lock(lock) {
-        int wc = lock.m_write_count;
-        int i = 0;
-        while (lock.m_write_count > 0) {
-            if (wc > lock.m_write_count || i++ > 1000000) // to avoid starvation
-                break;
-            _MM_PAUSE();
-        }
-
-        while (__sync_lock_test_and_set(&lock.m_is_writing, 1)) {
-            while (lock.m_is_writing)
-                _MM_PAUSE(); // busy-wait
-        }
-        __sync_fetch_and_add(&lock.m_read_count, 1);
-        __sync_lock_release(&m_lock.m_is_writing);
+    spin_rwlock() : m_read_count(0), m_write_count(0)
+    {
+        pthread_mutex_init(&m_read_mutex, nullptr);
+        pthread_mutex_init(&m_write_mutex, nullptr);
+        pthread_cond_init(&m_read_cond, nullptr);
     }
 
-    ~spin_lock_read() {
+private:
+    volatile int    m_read_count;
+    volatile int    m_write_count;
+    pthread_mutex_t m_read_mutex;
+    pthread_mutex_t m_write_mutex;
+    pthread_cond_t  m_read_cond;
+
+    friend class spin_rwlock_read;
+    friend class spin_rwlock_write;
+};
+
+class spin_rwlock_read {
+public:
+    spin_rwlock_read(spin_rwlock &lock) : m_lock(lock) {
+        for (;;) {
+            while (lock.m_write_count) {
+                pthread_mutex_lock(&lock.m_read_mutex);
+                timespec tspec = {0, 1000};
+                pthread_cond_timedwait(&lock.m_read_cond, &lock.m_read_mutex, &tspec);
+                pthread_mutex_unlock(&lock.m_read_mutex);
+            }
+
+            __sync_fetch_and_add(&lock.m_read_count, 1);
+
+            if (lock.m_write_count == 0)
+                break;
+
+            __sync_fetch_and_sub(&m_lock.m_read_count, 1);
+        }
+
+    }
+
+    ~spin_rwlock_read() {
         unlock();
     }
 
     void unlock() {
-        while (__sync_lock_test_and_set(&m_lock.m_is_writing, 1)) {
-            while (m_lock.m_is_writing)
-                _MM_PAUSE(); // busy-wait
-        }
         __sync_fetch_and_sub(&m_lock.m_read_count, 1);
-        __sync_lock_release(&m_lock.m_is_writing);
     }
 
 private:
     spin_rwlock &m_lock;
 };
 
-class spin_lock_write {
+class spin_rwlock_write {
 public:
-    spin_lock_write(spin_rwlock &lock) : m_lock(lock) {
-        __sync_fetch_and_add(&m_lock.m_write_count, 1);
-        for (;;) {
-            if (lock.m_read_count > 0)
-                continue;
+    spin_rwlock_write(spin_rwlock &lock) : m_lock(lock) {
+        __sync_fetch_and_add(&lock.m_write_count, 1);
 
-            while (__sync_lock_test_and_set(&lock.m_is_writing, 1)) {
-                while (lock.m_is_writing)
-                    _MM_PAUSE(); // busy-wait
-            }
+        while(lock.m_read_count) _MM_PAUSE;
 
-            if (lock.m_read_count > 0) {
-                __sync_lock_release(&m_lock.m_is_writing);
-            } else {
-                break;
-            }
-        }
+        pthread_mutex_lock(&lock.m_write_mutex);
     }
 
-    ~spin_lock_write() {
+    ~spin_rwlock_write() {
         unlock();
     }
 
     void unlock() {
-        __sync_lock_release(&m_lock.m_is_writing);
+        pthread_mutex_unlock(&m_lock.m_write_mutex);
         __sync_fetch_and_sub(&m_lock.m_write_count, 1);
+
+        if (m_lock.m_write_count == 0) {
+            pthread_mutex_lock(&m_lock.m_read_mutex);
+            pthread_cond_broadcast(&m_lock.m_read_cond);
+            pthread_mutex_unlock(&m_lock.m_read_mutex);
+        }
     }
 
 private:

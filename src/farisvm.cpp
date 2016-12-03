@@ -170,7 +170,7 @@ farisvm::farisvm()
 
 farisvm::~farisvm()
 {
-    spin_lock_write lock(m_lock);
+    spin_rwlock_write lock(m_lock);
 
     for (auto &p: m_codes) {
         delete p->code;
@@ -189,18 +189,16 @@ farisvm::check_flag(ptr_farisvm_code code, const query_uri *query)
             qd = &query->get_domain_lower();
         }
 
-        std::string::const_iterator search_result;
-
         for (auto &d: code->ex_domains) {
-            search_result = (*d.bmh)(qd->begin(), qd->end());
-            if (search_result == qd->end()) {
+            auto search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result.first == qd->end()) {
                 return false;
             }
         }
 
         for (auto &d: code->domains) {
-            search_result = (*d.bmh)(qd->begin(), qd->end());
-            if (search_result != qd->end()) {
+            auto search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result.first != qd->end()) {
                 return true;
             }
         }
@@ -414,7 +412,7 @@ farisvm::match(std::vector<match_result> *result, const query_uri *query, int si
 {
     // TODO: check input
 
-    spin_lock_read lock(m_lock);
+    spin_rwlock_read lock(m_lock);
 
     match_scheme(result, query, size);
     match_table(result, query, size);
@@ -731,7 +729,7 @@ farisvm::add_rule(const std::string &rule, const std::string &file)
 
     code->original_rule = rule;
 
-    spin_lock_write lock(m_lock);
+    spin_rwlock_write lock(m_lock);
     m_codes.push_back(code);
 
     farisvm_head *head = (farisvm_head*)code->code;
