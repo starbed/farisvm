@@ -232,7 +232,7 @@ farisvm::match_table(std::vector<match_result> *result,
     for (int i = 0; i < size; i++) {
         std::set<ptr_farisvm_code> ret;
         const std::string uri = query[i].get_uri_lower();
-        for (int m = 0; m < uri.size(); m++) {
+        for (int m = 0; m < (int)uri.size(); m++) {
             end = uri.c_str() + uri.size();
             sp = uri.c_str() + m;
 
@@ -389,7 +389,7 @@ farisvm::match_no_hash(std::vector<match_result> *result,
                 pc++;
             }
 
-            for (int j = 0; j < uri->size(); j++) {
+            for (int j = 0; j < (int)uri->size(); j++) {
                 const char *sp = uri->c_str() + j;
 
                 ret = vmrun(pc, sp, uri->size() - j, readnum);
