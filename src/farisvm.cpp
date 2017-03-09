@@ -189,6 +189,8 @@ farisvm::check_flag(ptr_farisvm_code code, const query_uri *query)
             qd = &query->get_domain_lower();
         }
 
+
+#if BOOST_VERSION < 106200
         std::string::const_iterator search_result;
         for (auto &d: code->ex_domains) {
             search_result = (*d.bmh)(qd->begin(), qd->end());
@@ -203,6 +205,21 @@ farisvm::check_flag(ptr_farisvm_code code, const query_uri *query)
                 return true;
             }
         }
+#else
+        for (auto &d: code->ex_domains) {
+            auto search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result.first == qd->end()) {
+                return false;
+            }
+        }
+
+        for (auto &d: code->domains) {
+            auto search_result = (*d.bmh)(qd->begin(), qd->end());
+            if (search_result.first != qd->end()) {
+                return true;
+            }
+        }
+#endif
 
         return false;
     }
